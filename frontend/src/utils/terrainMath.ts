@@ -46,36 +46,37 @@ export const LUNAR_CRATERS: CraterSpec[] = [
 export function getLunarHeight(x: number, z: number): number {
   const distFromCenter = Math.hypot(x, z);
 
-  // Leveled habitat pad (r <= 32m is strictly flat for stable structures)
-  if (distFromCenter < 32) {
+  // Leveled habitat pad (r <= 28m is strictly flat for stable structures)
+  if (distFromCenter < 28) {
     return 0.0;
   }
 
   // Rolling natural lunar regolith topography
   const lowNoise =
-    Math.sin(x * 0.015) * Math.cos(z * 0.015) * 2.8 +
-    Math.sin(x * 0.035 + 1.2) * Math.sin(z * 0.03 + 0.8) * 1.5 +
-    Math.cos(x * 0.07 + z * 0.05) * 0.6;
+    Math.sin(x * 0.014) * Math.cos(z * 0.014) * 2.2 +
+    Math.sin(x * 0.032 + 1.2) * Math.sin(z * 0.028 + 0.8) * 1.3 +
+    Math.cos(x * 0.065 + z * 0.048) * 0.5 +
+    Math.sin(x * 0.11 - z * 0.08) * 0.2;
 
   let craterDisplacement = 0;
 
-  // Evaluate influence of all defined craters
+  // Evaluate influence of defined craters with C1-continuous cosine profiles
   for (let i = 0; i < LUNAR_CRATERS.length; i++) {
     const c = LUNAR_CRATERS[i];
     const dx = x - c.cx;
     const dz = z - c.cz;
     const dist = Math.hypot(dx, dz);
 
-    if (dist < c.radius * 1.8) {
+    if (dist < c.radius * 1.35) {
       if (dist < c.radius) {
-        // Inside crater bowl: paraboloid depression
+        // Smooth crater bowl depression: zero derivative at center and lip
         const normDist = dist / c.radius;
-        const bowlFactor = 1.0 - normDist * normDist;
+        const bowlFactor = 0.5 * (1 + Math.cos(normDist * Math.PI));
         craterDisplacement -= c.depth * bowlFactor;
       }
-      // Crater rim: ejecta blanket & raised lip
-      const rimPeakDist = Math.abs(dist - c.radius * 0.95);
-      const rimWidth = c.radius * 0.35;
+      // Crater rim: ejecta blanket & raised lip (smooth cosine falloff)
+      const rimPeakDist = Math.abs(dist - c.radius * 0.98);
+      const rimWidth = c.radius * 0.32;
       if (rimPeakDist < rimWidth) {
         const rimFactor = Math.cos((rimPeakDist / rimWidth) * (Math.PI / 2));
         craterDisplacement += c.rimHeight * rimFactor * rimFactor;
@@ -83,25 +84,35 @@ export function getLunarHeight(x: number, z: number): number {
     }
   }
 
-  // Distant impact basin rim mountain ridges (r > 160m)
+  // Distant impact basin rim mountain ridges (r > 135m)
+  // Seamless smoothstep transition without any step or height jumps
   let horizonMountains = 0;
-  if (distFromCenter > 160) {
-    const ridgeDist = (distFromCenter - 160) / 90;
-    const ridgeNoise =
-      Math.sin(Math.atan2(z, x) * 8) * 4.0 +
-      Math.sin(Math.atan2(z, x) * 16 + 2.0) * 2.5 +
-      Math.sin(distFromCenter * 0.05) * 3.0;
-    horizonMountains = Math.min(28, (ridgeDist * ridgeDist * 8.0) + ridgeNoise);
+  if (distFromCenter > 135) {
+    const t = Math.min(1.0, (distFromCenter - 135) / 135);
+    const blend = t * t * (3 - 2 * t);
+    const angle = Math.atan2(z, x);
+    const ridgeProfile =
+      Math.sin(angle * 5) * 4.2 +
+      Math.cos(angle * 8 + 0.7) * 3.0 +
+      Math.sin(angle * 13 + 1.8) * 1.6 +
+      Math.sin(distFromCenter * 0.04) * 2.2;
+    const elevationRamp = Math.pow(t, 2.0) * 20.0;
+    horizonMountains = blend * (elevationRamp + ridgeProfile);
   }
 
   const rawHeight = lowNoise + craterDisplacement + horizonMountains;
 
   // Smooth blending transition from central leveled pad to natural terrain
-  if (distFromCenter < 55) {
-    const blendT = (distFromCenter - 32) / (55 - 32);
-    // Smoothstep interpolation
+  if (distFromCenter < 46) {
+    const blendT = (distFromCenter - 28) / (46 - 28);
     const smoothT = blendT * blendT * (3 - 2 * blendT);
     return rawHeight * smoothT;
+  }
+
+  // Graceful perimeter containment at outer grid edges (r > 265m)
+  if (distFromCenter > 265) {
+    const edgeT = Math.min(1.0, (distFromCenter - 265) / 30);
+    return rawHeight * (1.0 - edgeT * 0.5) - edgeT * 6.0;
   }
 
   return rawHeight;

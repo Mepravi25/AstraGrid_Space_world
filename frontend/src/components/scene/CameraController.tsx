@@ -15,6 +15,7 @@ export const CameraController: React.FC = () => {
   const orbitTarget = useHabitatStore((state) => state.orbitTarget);
   const selectedEquipmentId = useHabitatStore((state) => state.selectedEquipmentId);
   const equipment = useHabitatStore((state) => state.equipment);
+  const teleportSignal = useHabitatStore((state) => state.teleportSignal);
 
   // Desired target for smooth lerp when focusing equipment
   const targetPosRef = useRef(new THREE.Vector3(...orbitTarget));
@@ -28,6 +29,15 @@ export const CameraController: React.FC = () => {
       controlsRef.current.update();
     }
   }, []);
+
+  // Handle Base navigation in Orbit mode
+  useEffect(() => {
+    if (teleportSignal > 0 && controlsRef.current) {
+      camera.position.set(0, 5.5, 20);
+      controlsRef.current.target.set(0, 1.5, 4.4);
+      controlsRef.current.update();
+    }
+  }, [teleportSignal, camera]);
 
   // When focusing equipment or resetting camera target
   useEffect(() => {
@@ -43,7 +53,8 @@ export const CameraController: React.FC = () => {
     }
   }, [cameraTarget, selectedEquipmentId, equipment]);
 
-  // Synchronize navigation state on unmount (when switching back to Astronaut or Control)
+  // Synchronize navigation state on unmount (switching back to Astronaut or Control)
+  // Preserves exploration location and viewing direction
   useEffect(() => {
     return () => {
       const camPos = camera.position;
@@ -55,16 +66,16 @@ export const CameraController: React.FC = () => {
       const maxPitch = (Math.PI / 2) * 0.94;
       const pitch = Math.max(-maxPitch, Math.min(maxPitch, Math.asin(Math.max(-0.999, Math.min(0.999, dir.y)))));
 
-      // Resolve player position against obstacle collisions and lunar ground height
-      const [safeX, safeZ] = resolveHorizontalCollisions(camPos.x, camPos.z, camPos.x, camPos.z, 0.55);
+      const targetPos: [number, number, number] = controlsRef.current
+        ? [controlsRef.current.target.x, controlsRef.current.target.y, controlsRef.current.target.z]
+        : [orbitTarget[0], orbitTarget[1], orbitTarget[2]];
+
+      // Resolve player position at the inspected orbit target location
+      const [safeX, safeZ] = resolveHorizontalCollisions(targetPos[0], targetPos[2], targetPos[0], targetPos[2], 0.55);
       const terrainH = getLunarHeight(safeX, safeZ);
       const safeY = terrainH + 1.75; // EYE_HEIGHT
 
       const headingDeg = Math.round(((-yaw * 180) / Math.PI + 360) % 360);
-
-      const targetPos: [number, number, number] = controlsRef.current
-        ? [controlsRef.current.target.x, controlsRef.current.target.y, controlsRef.current.target.z]
-        : [camPos.x + dir.x * 12, camPos.y + dir.y * 12, camPos.z + dir.z * 12];
 
       useHabitatStore.getState().setOrbitState([camPos.x, camPos.y, camPos.z], targetPos);
       useHabitatStore.getState().setPlayerTransform([safeX, safeY, safeZ], headingDeg, yaw, pitch);
@@ -91,6 +102,10 @@ export const CameraController: React.FC = () => {
       minDistance={4}
       maxDistance={280}
       maxPolarAngle={Math.PI / 2.05} // Prevent camera going below lunar terrain
+      enableRotate={true}
+      enableZoom={true}
+      enablePan={true}
+      screenSpacePanning={true}
       target={orbitTarget}
     />
   );

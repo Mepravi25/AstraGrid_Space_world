@@ -71,7 +71,7 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       </mesh>
 
       {/* Top Observatory Cupola */}
-      <mesh position={[0, 4.8, 0]} castShadow>
+      <mesh position={[0, 4.8, 0]} castShadow receiveShadow>
         <sphereGeometry args={[0.95, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
         <meshStandardMaterial
           color="#0284c7"
@@ -83,18 +83,18 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       </mesh>
 
       {/* Cupola Window Frame Ring */}
-      <mesh position={[0, 4.8, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 4.8, 0]} rotation={[-Math.PI / 2, 0, 0]} castShadow receiveShadow>
         <torusGeometry args={[0.95, 0.08, 8, 24]} />
         <meshStandardMaterial color="#334155" metalness={0.8} />
       </mesh>
 
       {/* High-Gain Deep Space Earth Comm Dish */}
       <group position={[1.8, 4.7, -1.2]} rotation={[0.4, 0.7, 0]}>
-        <mesh castShadow>
+        <mesh castShadow receiveShadow>
           <cylinderGeometry args={[0.06, 0.06, 1.4, 8]} />
           <meshStandardMaterial color="#64748b" metalness={0.8} />
         </mesh>
-        <mesh position={[0, 0.7, 0]} rotation={[0, 0, 0]} castShadow>
+        <mesh position={[0, 0.7, 0]} rotation={[0, 0, 0]} castShadow receiveShadow>
           <sphereGeometry args={[0.7, 16, 12, 0, Math.PI * 2, 0, Math.PI / 3]} />
           <meshStandardMaterial color="#f1f5f9" metalness={0.6} side={THREE.DoubleSide} />
         </mesh>
@@ -107,7 +107,7 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       {/* Secondary Crew Quarters Dome (East side) */}
       <group position={[5.2, 0, 2.2]}>
         {/* Foundation */}
-        <mesh position={[0, 0.15, 0]}>
+        <mesh position={[0, 0.15, 0]} receiveShadow>
           <cylinderGeometry args={[3.0, 3.3, 0.3, 24]} />
           <meshStandardMaterial color="#475569" roughness={0.8} />
         </mesh>
@@ -129,7 +129,7 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       </group>
 
       {/* Pressurized Transit Corridor between Central & Crew Dome */}
-      <mesh position={[2.6, 1.2, 1.1]} rotation={[0, -0.4, Math.PI / 2]} castShadow>
+      <mesh position={[2.6, 1.2, 1.1]} rotation={[0, -0.4, Math.PI / 2]} castShadow receiveShadow>
         <cylinderGeometry args={[1.0, 1.0, 3.2, 16]} />
         <meshStandardMaterial color="#cbd5e1" metalness={0.5} roughness={0.4} />
       </mesh>

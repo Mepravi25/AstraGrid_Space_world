@@ -17,6 +17,10 @@ export const FirstPersonPlayerController: React.FC = () => {
   const initialPos = useHabitatStore((state) => state.playerPosition);
   const initialYaw = useHabitatStore((state) => state.playerYaw);
   const initialPitch = useHabitatStore((state) => state.playerPitch);
+  const teleportSignal = useHabitatStore((state) => state.teleportSignal);
+  const playerPosition = useHabitatStore((state) => state.playerPosition);
+  const playerYaw = useHabitatStore((state) => state.playerYaw);
+  const playerPitch = useHabitatStore((state) => state.playerPitch);
 
   // Astronaut physical constants
   const EYE_HEIGHT = 1.75;
@@ -47,6 +51,24 @@ export const FirstPersonPlayerController: React.FC = () => {
   const moveDir = useRef(new THREE.Vector3());
   const camDir = useRef(new THREE.Vector3());
   const objVec = useRef(new THREE.Vector3());
+
+  // Throttled store sync refs to avoid per-frame React re-renders
+  const lastSyncTimeRef = useRef(0);
+  const lastSyncedPosRef = useRef(new THREE.Vector3());
+  const lastTargetedIdRef = useRef<string | null>(null);
+
+  // Listen to teleport signal (e.g. Return to Base button)
+  useEffect(() => {
+    if (teleportSignal > 0) {
+      posRef.current.set(playerPosition[0], playerPosition[1], playerPosition[2]);
+      yawRef.current = playerYaw;
+      pitchRef.current = playerPitch;
+      velRef.current.set(0, 0, 0);
+      camera.position.copy(posRef.current);
+      camera.rotation.order = 'YXZ';
+      camera.rotation.set(pitchRef.current, yawRef.current, 0);
+    }
+  }, [teleportSignal, playerPosition, playerYaw, playerPitch, camera]);
 
   // Setup input listeners and pointer lock management
   useEffect(() => {
@@ -174,18 +196,19 @@ export const FirstPersonPlayerController: React.FC = () => {
       const yaw = yawRef.current;
       const pitch = pitchRef.current;
 
+      // Focus Orbit mode around current exploration site
       const forwardX = -Math.sin(yaw) * Math.cos(pitch);
       const forwardY = Math.sin(pitch);
       const forwardZ = -Math.cos(yaw) * Math.cos(pitch);
-      const targetDist = 14.0;
 
-      const orbitTarget: [number, number, number] = [
-        pos.x + forwardX * targetDist,
-        pos.y + forwardY * targetDist,
-        pos.z + forwardZ * targetDist
+      const orbitTarget: [number, number, number] = [pos.x, pos.y, pos.z];
+      const orbitCameraPos: [number, number, number] = [
+        pos.x - forwardX * 8.5,
+        pos.y - forwardY * 8.5 + 3.8,
+        pos.z - forwardZ * 8.5
       ];
 
-      useHabitatStore.getState().setOrbitState([pos.x, pos.y, pos.z], orbitTarget);
+      useHabitatStore.getState().setOrbitState(orbitCameraPos, orbitTarget);
       const headingDeg = ((-yaw * 180) / Math.PI + 360) % 360;
       useHabitatStore.getState().setPlayerTransform(
         [pos.x, pos.y, pos.z],
@@ -308,14 +331,21 @@ export const FirstPersonPlayerController: React.FC = () => {
       flashlightRef.current.target = flashlightTargetRef.current;
     }
 
-    // Periodic store sync for compass heading, coordinates, yaw, and pitch
-    const headingDeg = ((-yawRef.current * 180) / Math.PI + 360) % 360;
-    setPlayerTransform(
-      [posRef.current.x, posRef.current.y, posRef.current.z],
-      Math.round(headingDeg),
-      yawRef.current,
-      pitchRef.current
-    );
+    // Throttled store sync for compass heading, coordinates, yaw, and pitch
+    // Eliminates per-frame React state updates during continuous movement
+    const now = performance.now();
+    const distSqSinceSync = posRef.current.distanceToSquared(lastSyncedPosRef.current);
+    if (now - lastSyncTimeRef.current > 120 || distSqSinceSync > 0.08) {
+      lastSyncTimeRef.current = now;
+      lastSyncedPosRef.current.copy(posRef.current);
+      const headingDeg = ((-yawRef.current * 180) / Math.PI + 360) % 360;
+      setPlayerTransform(
+        [posRef.current.x, posRef.current.y, posRef.current.z],
+        Math.round(headingDeg),
+        yawRef.current,
+        pitchRef.current
+      );
+    }
 
     // Contextual Equipment Reticle Raycast Detection (within 12m)
     camera.getWorldDirection(camDir.current);
@@ -339,7 +369,10 @@ export const FirstPersonPlayerController: React.FC = () => {
       }
     }
 
-    setTargetedEquipmentId(closestId);
+    if (closestId !== lastTargetedIdRef.current) {
+      lastTargetedIdRef.current = closestId;
+      setTargetedEquipmentId(closestId);
+    }
   });
 
   return (

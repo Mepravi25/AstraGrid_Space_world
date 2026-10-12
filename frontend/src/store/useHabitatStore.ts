@@ -28,6 +28,8 @@ interface HabitatStoreState {
   orbitTarget: [number, number, number];
   orbitCameraPos: [number, number, number];
   targetedEquipmentId: string | null;
+  teleportSignal: number;
+  navigationNotice: string | null;
 
   // Actions
   selectEquipment: (id: string | null) => void;
@@ -54,6 +56,7 @@ interface HabitatStoreState {
   setTargetedEquipmentId: (id: string | null) => void;
   interactWithTargeted: () => void;
   returnToBase: () => void;
+  clearNavigationNotice: () => void;
 
   // Equipment subsystem actions
   setSolarTrackingMode: (id: string, mode: 'auto' | 'stow' | 'manual') => void;
@@ -180,13 +183,15 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
     isPointerLocked: false,
     isFlashlightOn: false,
     hudMode: 'explore',
-    playerPosition: [0, 1.75, 18], // Spawn astronaut just south of main habitat dome
+    playerPosition: [0, 1.75, 14], // Spawn astronaut just south of main habitat entrance
     playerYaw: 0,
     playerPitch: 0,
     playerHeadingDeg: 0,
-    orbitTarget: [0, 1.75, 0],
-    orbitCameraPos: [0, 6, 25],
+    orbitTarget: [0, 1.5, 4.4],
+    orbitCameraPos: [0, 5.5, 20],
     targetedEquipmentId: null,
+    teleportSignal: 0,
+    navigationNotice: null,
 
     selectEquipment: (id: string | null) => {
       const currentHud = get().hudMode;
@@ -238,8 +243,7 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
 
       if (mode === 'free_cam') {
         // Transitioning from Astronaut to Orbit:
-        // Capture astronaut's current position and viewing direction,
-        // and project an orbit target ahead of the astronaut.
+        // Focus Orbit mode around current astronaut exploration location and maintain viewing perspective
         const [px, py, pz] = current.playerPosition;
         const yaw = current.playerYaw;
         const pitch = current.playerPitch;
@@ -247,19 +251,19 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
         const forwardX = -Math.sin(yaw) * Math.cos(pitch);
         const forwardY = Math.sin(pitch);
         const forwardZ = -Math.cos(yaw) * Math.cos(pitch);
-        const targetDistance = 14.0;
 
-        const targetAhead: [number, number, number] = [
-          px + forwardX * targetDistance,
-          py + forwardY * targetDistance,
-          pz + forwardZ * targetDistance
+        const orbitTarget: [number, number, number] = [px, py, pz];
+        const orbitCameraPos: [number, number, number] = [
+          px - forwardX * 8.5,
+          py - forwardY * 8.5 + 3.8,
+          pz - forwardZ * 8.5
         ];
 
         set({
           explorationMode: 'free_cam',
           isPointerLocked: false,
-          orbitCameraPos: [px, py, pz],
-          orbitTarget: targetAhead,
+          orbitCameraPos,
+          orbitTarget,
           cameraTarget: null
         });
       } else {
@@ -335,16 +339,22 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
     },
 
     returnToBase: () => {
-      set({
-        playerPosition: [0, 1.75, 18],
+      set((state) => ({
+        playerPosition: [0, 1.75, 14],
         playerYaw: 0,
         playerPitch: 0,
         playerHeadingDeg: 0,
-        orbitCameraPos: [0, 6, 25],
-        orbitTarget: [0, 1.75, 0],
+        orbitCameraPos: [0, 5.5, 20],
+        orbitTarget: [0, 1.5, 4.4],
         cameraTarget: null,
-        selectedEquipmentId: null
-      });
+        selectedEquipmentId: null,
+        teleportSignal: state.teleportSignal + 1,
+        navigationNotice: 'Returned to Habitat Entrance (HAB-CORE-ALPHA)'
+      }));
+    },
+
+    clearNavigationNotice: () => {
+      set({ navigationNotice: null });
     },
 
     // Subsystem Specific Actions

@@ -31,8 +31,21 @@ export const ExplorationOverlay: React.FC = () => {
   const selectEquipment = useHabitatStore((state) => state.selectEquipment);
   const interactWithTargeted = useHabitatStore((state) => state.interactWithTargeted);
   const returnToBase = useHabitatStore((state) => state.returnToBase);
+  const navigationNotice = useHabitatStore((state) => state.navigationNotice);
+  const clearNavigationNotice = useHabitatStore((state) => state.clearNavigationNotice);
 
   const [dismissGuide, setDismissGuide] = useState(false);
+  const [showControlsGuide, setShowControlsGuide] = useState(true);
+
+  // Auto-clear navigation notice after 3.5 seconds
+  useEffect(() => {
+    if (navigationNotice) {
+      const timer = setTimeout(() => {
+        clearNavigationNotice();
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [navigationNotice, clearNavigationNotice]);
 
   const targetedEquipment = equipmentList.find((e) => e.id === targetedEquipmentId);
 
@@ -212,14 +225,24 @@ export const ExplorationOverlay: React.FC = () => {
           {/* Return to Base */}
           <button
             onClick={returnToBase}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/50 text-xs font-mono transition-all cursor-pointer"
-            title="Return Astronaut to Habitat Core Entrance"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-950/80 border border-cyan-500/40 text-cyan-300 hover:text-white hover:bg-cyan-950/70 text-xs font-mono transition-all cursor-pointer shadow-[0_0_8px_rgba(0,229,255,0.2)]"
+            title="Return to Habitat Entrance [HAB-CORE-ALPHA]"
           >
-            <Home className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">BASE</span>
+            <Home className="w-3.5 h-3.5 text-cyan-400" />
+            <span>BASE</span>
           </button>
         </div>
       </div>
+
+      {/* Deliberate navigation toast notification */}
+      {navigationNotice && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-auto z-40 animate-bounce">
+          <div className="flex items-center gap-2.5 px-4 py-2 rounded-lg bg-slate-950/95 border border-cyan-400 text-cyan-200 text-xs font-mono shadow-[0_0_24px_rgba(0,229,255,0.5)] backdrop-blur-md">
+            <Home className="w-4 h-4 text-cyan-400 animate-pulse" />
+            <span className="font-bold tracking-wide">{navigationNotice}</span>
+          </div>
+        </div>
+      )}
 
       {/* CENTER: Crosshair Reticle & Contextual Interaction Prompt */}
       {explorationMode === 'first_person' && (
@@ -349,6 +372,79 @@ export const ExplorationOverlay: React.FC = () => {
           </div>
         )}
 
+      {/* Compact Readable Control Guide Panel */}
+      {showControlsGuide && (
+        <div className="absolute bottom-14 right-3 pointer-events-auto z-20">
+          <div className="p-2.5 rounded-lg bg-slate-950/90 border border-slate-800/90 shadow-2xl backdrop-blur-md max-w-xs">
+            <div className="flex items-center justify-between gap-3 pb-1.5 mb-1.5 border-b border-slate-800 text-[10px] font-mono font-bold text-cyan-400 uppercase tracking-wider">
+              <span>CONTROLS GUIDE</span>
+              <button
+                onClick={() => setShowControlsGuide(false)}
+                className="text-slate-500 hover:text-white cursor-pointer"
+                title="Minimize Controls Guide"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] font-mono text-slate-300">
+              {explorationMode === 'first_person' ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold text-[9px]">WASD</span>
+                    <span className="text-slate-400">Move</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold text-[9px]">MOUSE</span>
+                    <span className="text-slate-400">Look</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold text-[9px]">SHIFT</span>
+                    <span className="text-slate-400">Sprint</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold text-[9px]">E</span>
+                    <span className="text-slate-400">Interact</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold text-[9px]">F</span>
+                    <span className="text-slate-400">Light [{isFlashlightOn ? 'ON' : 'OFF'}]</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold text-[9px]">ESC</span>
+                    <span className="text-slate-400">Release</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5 col-span-2">
+                    <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold text-[9px]">LEFT-DRAG</span>
+                    <span className="text-slate-400">Rotate View</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 col-span-2">
+                    <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold text-[9px]">WHEEL</span>
+                    <span className="text-slate-400">Zoom In/Out</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 col-span-2">
+                    <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold text-[9px]">RIGHT-DRAG</span>
+                    <span className="text-slate-400">Pan Exploration Site</span>
+                  </div>
+                </>
+              )}
+              <div className="flex items-center justify-between col-span-2 pt-1 mt-0.5 border-t border-slate-800/60 text-[9px]">
+                <div className="flex items-center gap-1">
+                  <span className="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 font-bold">TAB</span>
+                  <span className="text-slate-400">HUD</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="px-1 py-0.2 rounded bg-cyan-900/60 text-cyan-300 font-bold">BASE</span>
+                  <span className="text-slate-400">Habitat Entrance</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* BOTTOM BAR: Waypoint Compass Radar & Status Ticker */}
       <div className="flex items-end justify-between gap-3 pointer-events-auto">
         {/* Spatial Waypoints Radar */}
@@ -374,10 +470,20 @@ export const ExplorationOverlay: React.FC = () => {
           })}
         </div>
 
-        {/* Quick Help reminder */}
-        <div className="px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800/80 text-[10px] font-mono text-slate-400 hidden sm:block">
-          Press <span className="text-cyan-300 font-bold">TAB</span> to hide HUD |{' '}
-          <span className="text-cyan-300 font-bold">ESC</span> to release mouse
+        {/* Quick Help reminder / Controls toggle */}
+        <div className="flex items-center gap-2">
+          {!showControlsGuide && (
+            <button
+              onClick={() => setShowControlsGuide(true)}
+              className="px-2 py-1 rounded bg-slate-950/80 border border-slate-800 hover:border-cyan-500 text-[10px] font-mono text-cyan-300 cursor-pointer"
+            >
+              [?] CONTROLS
+            </button>
+          )}
+          <div className="px-2.5 py-1 rounded bg-slate-950/80 border border-slate-800/80 text-[10px] font-mono text-slate-400 hidden sm:block">
+            Press <span className="text-cyan-300 font-bold">TAB</span> to hide HUD |{' '}
+            <span className="text-cyan-300 font-bold">ESC</span> to release mouse
+          </div>
         </div>
       </div>
     </div>

@@ -7,6 +7,14 @@ import { HabitatComplex } from './HabitatComplex';
 import { CameraController } from './CameraController';
 import { FirstPersonPlayerController } from './FirstPersonPlayerController';
 import { useHabitatStore } from '../../store/useHabitatStore';
+import {
+  SUN_LIGHT_POSITION,
+  SUN_LIGHT_COLOR,
+  SUN_LIGHT_INTENSITY,
+  LUNAR_FILL_SKY_COLOR,
+  LUNAR_FILL_GROUND_COLOR,
+  LUNAR_FILL_INTENSITY
+} from '../../utils/celestialConstants';
 
 const AstronautOrbitFlashlight: React.FC = () => {
   const isFlashlightOn = useHabitatStore((state) => state.isFlashlightOn);
@@ -69,35 +77,40 @@ export const LunarScene: React.FC = () => {
     >
       <Canvas
         shadows
-        camera={{ position: [0, 1.75, 18], fov: 68, near: 0.1, far: 850 }}
+        camera={{ position: [0, 1.75, 14], fov: 68, near: 0.1, far: 950 }}
         gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
+        onCreated={({ gl }) => {
+          gl.shadowMap.type = THREE.PCFSoftShadowMap;
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.25;
+        }}
         onPointerMissed={() => selectEquipment(null)}
       >
-        <color attach="background" args={['#06070b']} />
-        <fog attach="fog" args={['#06070b', 140, 520]} />
+        {/* Pure pitch-black deep space void (no atmospheric scattering) */}
+        <color attach="background" args={['#010204']} />
 
-        {/* Harsh Lunar Sunlight (Low-angle grazing polar sunlight) */}
+        {/* 1. Principal Direct Sunlight (Physically unified with Sun disc direction) */}
         <directionalLight
-          position={[-120, 55, -100]}
-          intensity={2.8}
-          color="#fffdf0"
+          position={SUN_LIGHT_POSITION}
+          intensity={SUN_LIGHT_INTENSITY}
+          color={SUN_LIGHT_COLOR}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
-          shadow-camera-near={10}
-          shadow-camera-far={350}
-          shadow-camera-left={-100}
-          shadow-camera-right={100}
-          shadow-camera-top={100}
-          shadow-camera-bottom={-100}
-          shadow-bias={-0.0004}
+          shadow-camera-near={100}
+          shadow-camera-far={420}
+          shadow-camera-left={-125}
+          shadow-camera-right={125}
+          shadow-camera-top={125}
+          shadow-camera-bottom={-125}
+          shadow-bias={-0.00025}
+          shadow-normalBias={0.015}
         />
 
-        {/* Minimal ambient light (Moon has no atmospheric diffusion) */}
-        <ambientLight intensity={0.18} color="#475569" />
-
-        {/* Earthshine indirect illumination */}
-        <directionalLight position={[100, 45, -120]} intensity={0.45} color="#38bdf8" />
+        {/* 2. Restrained Secondary Regolith / Earthshine Bounce (Preserves shadow visibility without haze) */}
+        <hemisphereLight
+          args={[LUNAR_FILL_SKY_COLOR, LUNAR_FILL_GROUND_COLOR, LUNAR_FILL_INTENSITY]}
+        />
 
         <Suspense fallback={null}>
           <LunarSky />

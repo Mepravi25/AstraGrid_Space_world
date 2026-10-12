@@ -1,9 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useHabitatStore } from '../../../store/useHabitatStore';
 import { EquipmentStatusIndicator } from '../EquipmentStatusIndicator';
 import { getLunarHeight } from '../../../utils/terrainMath';
+import { getPhotovoltaicTexture } from '../../../utils/lunarTextures';
 
 interface SolarArrayProps {
   id: string;
@@ -14,16 +15,18 @@ const SingleArrayMast: React.FC<{
   status: string;
   hovered: boolean;
 }> = ({ panelRef, status, hovered }) => {
+  const pvTexture = useMemo(() => getPhotovoltaicTexture(), []);
+
   return (
     <group>
       {/* Foundation Pad */}
-      <mesh position={[0, 0.1, 0]}>
+      <mesh position={[0, 0.1, 0]} receiveShadow>
         <cylinderGeometry args={[2.8, 3.2, 0.25, 8]} />
         <meshStandardMaterial color="#3a3d47" roughness={0.9} />
       </mesh>
 
       {/* Vertical Mast Column */}
-      <mesh position={[0, 2.5, 0]} castShadow>
+      <mesh position={[0, 2.5, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[0.3, 0.45, 5, 16]} />
         <meshStandardMaterial
           color={hovered ? '#60a5fa' : '#94a3b8'}
@@ -33,38 +36,41 @@ const SingleArrayMast: React.FC<{
       </mesh>
 
       {/* Gimbal Elevation Actuator Hub */}
-      <mesh position={[0, 4.8, 0]} castShadow>
+      <mesh position={[0, 4.8, 0]} castShadow receiveShadow>
         <sphereGeometry args={[0.65, 16, 16]} />
         <meshStandardMaterial color="#334155" metalness={0.8} roughness={0.2} />
       </mesh>
 
       {/* Horizontal Cross-Beam */}
-      <mesh position={[0, 4.8, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+      <mesh position={[0, 4.8, 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
         <cylinderGeometry args={[0.2, 0.2, 8.5, 12]} />
         <meshStandardMaterial color="#64748b" metalness={0.7} roughness={0.3} />
       </mesh>
 
-      {/* Articulated Solar Panel Wings */}
-      <group ref={panelRef} position={[0, 4.8, 0]} rotation={[-0.35, 0, 0]}>
+      {/* Articulated Solar Panel Wings (Tilted to track the Sun) */}
+      <group ref={panelRef} position={[0, 4.8, 0]} rotation={[-0.42, 0.55, 0]}>
         {/* Left Wing Panel */}
         <group position={[-3.8, 0, 0]}>
           <mesh castShadow receiveShadow>
             <boxGeometry args={[4.2, 0.12, 3.2]} />
             <meshStandardMaterial color="#cbd5e1" metalness={0.6} roughness={0.4} />
           </mesh>
-          <mesh position={[0, 0.07, 0]}>
+          {/* Top Photovoltaic Silicon Grid Surface */}
+          <mesh position={[0, 0.065, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[4.0, 3.0]} />
             <meshStandardMaterial
-              color="#0c2340"
+              map={pvTexture}
+              color="#172554"
               metalness={0.85}
-              roughness={0.15}
-              emissive={status === 'nominal' ? '#0284c7' : '#000000'}
-              emissiveIntensity={status === 'nominal' ? 0.15 : 0}
+              roughness={0.16}
+              emissive={status === 'nominal' ? '#0369a1' : '#000000'}
+              emissiveIntensity={status === 'nominal' ? 0.08 : 0}
             />
           </mesh>
-          <mesh position={[0, -0.07, 0]} rotation={[Math.PI, 0, 0]}>
+          {/* Underside Gold MLI Thermal Insulation */}
+          <mesh position={[0, -0.065, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <planeGeometry args={[4.0, 3.0]} />
-            <meshStandardMaterial color="#eab308" metalness={0.9} roughness={0.2} />
+            <meshStandardMaterial color="#eab308" metalness={0.92} roughness={0.25} />
           </mesh>
         </group>
 
@@ -74,19 +80,22 @@ const SingleArrayMast: React.FC<{
             <boxGeometry args={[4.2, 0.12, 3.2]} />
             <meshStandardMaterial color="#cbd5e1" metalness={0.6} roughness={0.4} />
           </mesh>
-          <mesh position={[0, 0.07, 0]}>
+          {/* Top Photovoltaic Silicon Grid Surface */}
+          <mesh position={[0, 0.065, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[4.0, 3.0]} />
             <meshStandardMaterial
-              color="#0c2340"
+              map={pvTexture}
+              color="#172554"
               metalness={0.85}
-              roughness={0.15}
-              emissive={status === 'nominal' ? '#0284c7' : '#000000'}
-              emissiveIntensity={status === 'nominal' ? 0.15 : 0}
+              roughness={0.16}
+              emissive={status === 'nominal' ? '#0369a1' : '#000000'}
+              emissiveIntensity={status === 'nominal' ? 0.08 : 0}
             />
           </mesh>
-          <mesh position={[0, -0.07, 0]} rotation={[Math.PI, 0, 0]}>
+          {/* Underside Gold MLI Thermal Insulation */}
+          <mesh position={[0, -0.065, 0]} rotation={[Math.PI / 2, 0, 0]}>
             <planeGeometry args={[4.0, 3.0]} />
-            <meshStandardMaterial color="#eab308" metalness={0.9} roughness={0.2} />
+            <meshStandardMaterial color="#eab308" metalness={0.92} roughness={0.25} />
           </mesh>
         </group>
       </group>
@@ -127,7 +136,8 @@ export const SolarArray: React.FC<SolarArrayProps> = ({ id }) => {
   useFrame((state) => {
     if (panelRef.current && status !== 'offline' && status !== 'critical') {
       const sunTrack = Math.sin(state.clock.elapsedTime * 0.1) * 0.05;
-      panelRef.current.rotation.x = -0.35 + sunTrack;
+      panelRef.current.rotation.x = -0.42 + sunTrack;
+      panelRef.current.rotation.y = 0.55;
     }
   });
 

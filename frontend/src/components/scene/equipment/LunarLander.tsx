@@ -50,7 +50,7 @@ export const LunarLander: React.FC<LunarLanderProps> = ({ id }) => {
       />
 
       {/* Octagonal Descent Stage Core with Gold Foil MLI Thermal Blanket */}
-      <mesh position={[0, 2.2, 0]} castShadow>
+      <mesh position={[0, 2.2, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[3.8, 4.2, 2.4, 8]} />
         <meshStandardMaterial
           color={hovered ? '#fbbf24' : '#d97706'}
@@ -60,7 +60,7 @@ export const LunarLander: React.FC<LunarLanderProps> = ({ id }) => {
       </mesh>
 
       {/* Main Rocket Engine Nozzle (Bell) */}
-      <mesh position={[0, 0.5, 0]} castShadow>
+      <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
         <coneGeometry args={[1.2, 1.6, 16]} />
         <meshStandardMaterial color="#1e293b" roughness={0.6} metalness={0.7} />
       </mesh>
@@ -72,12 +72,12 @@ export const LunarLander: React.FC<LunarLanderProps> = ({ id }) => {
         return (
           <group key={idx}>
             {/* Diagonal Strut */}
-            <mesh position={[legX * 0.55, 1.4, legZ * 0.55]} rotation={[0, -angle, 0.45]}>
+            <mesh position={[legX * 0.55, 1.4, legZ * 0.55]} rotation={[0, -angle, 0.45]} castShadow receiveShadow>
               <cylinderGeometry args={[0.12, 0.12, 4.2, 8]} />
               <meshStandardMaterial color="#cbd5e1" metalness={0.8} roughness={0.2} />
             </mesh>
             {/* Circular Regolith Footpad */}
-            <mesh position={[legX, 0.08, legZ]}>
+            <mesh position={[legX, 0.08, legZ]} receiveShadow>
               <cylinderGeometry args={[0.9, 0.95, 0.16, 16]} />
               <meshStandardMaterial color="#e2e8f0" metalness={0.9} roughness={0.2} />
             </mesh>
@@ -86,7 +86,7 @@ export const LunarLander: React.FC<LunarLanderProps> = ({ id }) => {
       })}
 
       {/* Cylindrical Pressurized Payload / Habitation Module Upper Section */}
-      <mesh position={[0, 4.6, 0]} castShadow>
+      <mesh position={[0, 4.6, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[2.8, 3.2, 2.6, 16]} />
         <meshStandardMaterial
           color="#f8fafc"

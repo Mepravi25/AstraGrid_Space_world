@@ -124,5 +124,14 @@ export function resolveHorizontalCollisions(
     }
   }
 
+  // Constrain exploration within navigable terrain bounds (radius 270m)
+  const maxRadius = 270.0;
+  const currentDist = Math.hypot(resX, resZ);
+  if (currentDist > maxRadius) {
+    const scale = maxRadius / currentDist;
+    resX *= scale;
+    resZ *= scale;
+  }
+
   return [resX, resZ];
 }
