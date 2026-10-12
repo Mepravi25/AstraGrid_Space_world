@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Compass,
   Flashlight,
@@ -27,12 +27,42 @@ export const ExplorationOverlay: React.FC = () => {
   const setExplorationMode = useHabitatStore((state) => state.setExplorationMode);
   const toggleFlashlight = useHabitatStore((state) => state.toggleFlashlight);
   const setHudMode = useHabitatStore((state) => state.setHudMode);
+  const toggleHud = useHabitatStore((state) => state.toggleHud);
   const selectEquipment = useHabitatStore((state) => state.selectEquipment);
+  const interactWithTargeted = useHabitatStore((state) => state.interactWithTargeted);
   const returnToBase = useHabitatStore((state) => state.returnToBase);
 
   const [dismissGuide, setDismissGuide] = useState(false);
 
   const targetedEquipment = equipmentList.find((e) => e.id === targetedEquipmentId);
+
+  // Global keyboard shortcuts (KeyF for flashlight, KeyE for interact, Tab for HUD)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (document.activeElement?.tagName || '').toLowerCase();
+      if (
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        activeTag === 'select' ||
+        (document.activeElement as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.code === 'KeyF') {
+        e.preventDefault();
+        toggleFlashlight();
+      } else if (e.code === 'KeyE') {
+        interactWithTargeted();
+      } else if (e.code === 'Tab') {
+        e.preventDefault();
+        toggleHud();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [toggleFlashlight, interactWithTargeted, toggleHud]);
 
   // Calculate distance to targeted equipment if present
   let targetedDistanceM = 0;
@@ -50,9 +80,21 @@ export const ExplorationOverlay: React.FC = () => {
   };
 
   const handleEnterSimulation = () => {
+    setDismissGuide(true);
     const canvas = document.querySelector('canvas');
     if (canvas) {
-      canvas.requestPointerLock();
+      try {
+        window.focus();
+        if (typeof canvas.focus === 'function') {
+          canvas.focus();
+        }
+        const p = canvas.requestPointerLock?.();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {});
+        }
+      } catch (err) {
+        console.warn('Pointer lock request error:', err);
+      }
     }
   };
 
@@ -101,7 +143,8 @@ export const ExplorationOverlay: React.FC = () => {
           <button
             onClick={() => {
               setExplorationMode('first_person');
-              setDismissGuide(false);
+              setDismissGuide(true);
+              handleEnterSimulation();
             }}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition-all cursor-pointer ${
               explorationMode === 'first_person'
@@ -143,7 +186,7 @@ export const ExplorationOverlay: React.FC = () => {
 
         {/* Right: Quick Astronaut Tool Controls */}
         <div className="flex items-center gap-1.5">
-          {/* Flashlight toggle */}
+          {/* Flashlight toggle with explicit ON/OFF status */}
           <button
             onClick={toggleFlashlight}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono transition-all cursor-pointer ${
@@ -155,6 +198,15 @@ export const ExplorationOverlay: React.FC = () => {
           >
             <Flashlight className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">[F] LIGHT</span>
+            <span
+              className={`px-1 py-0.2 rounded text-[10px] font-bold ${
+                isFlashlightOn
+                  ? 'bg-amber-400 text-slate-950 shadow-[0_0_6px_#f59e0b]'
+                  : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              {isFlashlightOn ? 'ON' : 'OFF'}
+            </span>
           </button>
 
           {/* Return to Base */}
@@ -205,6 +257,21 @@ export const ExplorationOverlay: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Instruction banner shown when pointer lock is not active in astronaut mode */}
+      {explorationMode === 'first_person' && !isPointerLocked && hudMode === 'explore' && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-auto z-20">
+          <button
+            onClick={handleEnterSimulation}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-950/90 border border-cyan-400 text-cyan-300 font-mono text-xs shadow-[0_0_20px_rgba(0,229,255,0.4)] backdrop-blur-md cursor-pointer hover:bg-cyan-950/80 hover:border-cyan-300 transition-all hover:scale-105 active:scale-95 animate-pulse"
+            title="Click to capture mouse (ESC to release)"
+          >
+            <MousePointer className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="font-bold tracking-wider">CLICK TO CAPTURE MOUSE</span>
+            <span className="text-[10px] text-slate-400 border-l border-slate-700 pl-2">[ESC to release]</span>
+          </button>
         </div>
       )}
 

@@ -11,11 +11,12 @@ export const FirstPersonPlayerController: React.FC = () => {
   const isFlashlightOn = useHabitatStore((state) => state.isFlashlightOn);
   const setPointerLocked = useHabitatStore((state) => state.setPointerLocked);
   const setTargetedEquipmentId = useHabitatStore((state) => state.setTargetedEquipmentId);
-  const interactWithTargeted = useHabitatStore((state) => state.interactWithTargeted);
-  const toggleFlashlight = useHabitatStore((state) => state.toggleFlashlight);
-  const toggleHud = useHabitatStore((state) => state.toggleHud);
   const setPlayerTransform = useHabitatStore((state) => state.setPlayerTransform);
   const equipment = useHabitatStore((state) => state.equipment);
+
+  const initialPos = useHabitatStore((state) => state.playerPosition);
+  const initialYaw = useHabitatStore((state) => state.playerYaw);
+  const initialPitch = useHabitatStore((state) => state.playerPitch);
 
   // Astronaut physical constants
   const EYE_HEIGHT = 1.75;
@@ -24,14 +25,14 @@ export const FirstPersonPlayerController: React.FC = () => {
   const JUMP_IMPULSE = 5.2;
   const GRAVITY = -11.5; // Tuned for responsive lunar bounding
 
-  // Player physics state
-  const posRef = useRef(new THREE.Vector3(0, 1.75, 18));
+  // Player physics state - initialized from store authoritative navigation state
+  const posRef = useRef(new THREE.Vector3(initialPos[0], initialPos[1], initialPos[2]));
   const velRef = useRef(new THREE.Vector3(0, 0, 0));
   const isGroundedRef = useRef(true);
 
-  // Camera orientation angles (Euler YXZ)
-  const yawRef = useRef(0);
-  const pitchRef = useRef(0);
+  // Camera orientation angles (Euler YXZ) - initialized from store
+  const yawRef = useRef(initialYaw);
+  const pitchRef = useRef(initialPitch);
 
   // Key tracking
   const keysRef = useRef<{ [key: string]: boolean }>({});
@@ -47,65 +48,170 @@ export const FirstPersonPlayerController: React.FC = () => {
   const camDir = useRef(new THREE.Vector3());
   const objVec = useRef(new THREE.Vector3());
 
-  // Setup input listeners
+  // Setup input listeners and pointer lock management
   useEffect(() => {
-    // Initialize initial position on terrain
+    // Ensure initial vertical position respects lunar terrain
     const initialH = getLunarHeight(posRef.current.x, posRef.current.z);
-    posRef.current.y = initialH + EYE_HEIGHT;
+    posRef.current.y = Math.max(posRef.current.y, initialH + EYE_HEIGHT);
+
+    // Apply immediate camera transform
+    camera.position.copy(posRef.current);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.set(pitchRef.current, yawRef.current, 0);
+
+    let isMouseDown = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      // Ignore movement if user is typing in form inputs
       const activeTag = (document.activeElement?.tagName || '').toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
+      if (
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        activeTag === 'select' ||
+        (document.activeElement as HTMLElement)?.isContentEditable
+      ) {
         return;
       }
-
       keysRef.current[e.code] = true;
-
-      // Handle action shortcuts
-      if (e.code === 'KeyF') {
-        toggleFlashlight();
-      } else if (e.code === 'KeyE') {
-        interactWithTargeted();
-      } else if (e.code === 'Tab') {
-        e.preventDefault();
-        toggleHud();
-      }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
       keysRef.current[e.code] = false;
     };
 
-    const onMouseMove = (e: MouseEvent) => {
-      if (document.pointerLockElement === gl.domElement) {
-        const SENSITIVITY = 0.0022;
-        yawRef.current -= e.movementX * SENSITIVITY;
-        pitchRef.current -= e.movementY * SENSITIVITY;
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) {
+        isMouseDown = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      }
+    };
 
-        // Clamp vertical look between -85° and +85°
-        const maxPitch = (Math.PI / 2) * 0.94;
-        pitchRef.current = Math.max(-maxPitch, Math.min(maxPitch, pitchRef.current));
+    const onMouseUp = () => {
+      isMouseDown = false;
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      const isLocked =
+        document.pointerLockElement === gl.domElement ||
+        document.pointerLockElement === document.body ||
+        document.pointerLockElement !== null;
+
+      let dx = 0;
+      let dy = 0;
+
+      if (isLocked) {
+        dx = e.movementX ?? (e as any).mozMovementX ?? (e as any).webkitMovementX ?? 0;
+        dy = e.movementY ?? (e as any).mozMovementY ?? (e as any).webkitMovementY ?? 0;
+      } else if (isMouseDown) {
+        // Smooth drag-look fallback if pointer lock is not yet engaged
+        dx = e.clientX - lastMouseX;
+        dy = e.clientY - lastMouseY;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      } else {
+        return;
+      }
+
+      const SENSITIVITY = 0.0022;
+      yawRef.current -= dx * SENSITIVITY;
+      pitchRef.current -= dy * SENSITIVITY;
+
+      // Clamp vertical look between -85° and +85°
+      const maxPitch = (Math.PI / 2) * 0.94;
+      pitchRef.current = Math.max(-maxPitch, Math.min(maxPitch, pitchRef.current));
+    };
+
+    const handleCanvasClick = () => {
+      if (document.pointerLockElement !== gl.domElement) {
+        try {
+          window.focus();
+          if (typeof gl.domElement.focus === 'function') {
+            gl.domElement.focus();
+          }
+          const p = gl.domElement.requestPointerLock?.();
+          if (p && typeof p.catch === 'function') {
+            p.catch(() => {});
+          }
+        } catch (e) {
+          console.warn('Pointer lock request error:', e);
+        }
       }
     };
 
     const onPointerLockChange = () => {
-      const isLocked = document.pointerLockElement === gl.domElement;
+      const isLocked =
+        document.pointerLockElement === gl.domElement ||
+        document.pointerLockElement === document.body ||
+        Boolean(document.pointerLockElement);
       setPointerLocked(isLocked);
+    };
+
+    const onPointerLockError = () => {
+      setPointerLocked(false);
+    };
+
+    const onWindowBlur = () => {
+      // Clear key state when losing focus
+      keysRef.current = {};
+      isMouseDown = false;
     };
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('blur', onWindowBlur);
+    gl.domElement.addEventListener('click', handleCanvasClick);
     document.addEventListener('pointerlockchange', onPointerLockChange);
+    document.addEventListener('pointerlockerror', onPointerLockError);
 
     return () => {
+      // Synchronize player orientation and position to authoritative store on unmount
+      const pos = posRef.current;
+      const yaw = yawRef.current;
+      const pitch = pitchRef.current;
+
+      const forwardX = -Math.sin(yaw) * Math.cos(pitch);
+      const forwardY = Math.sin(pitch);
+      const forwardZ = -Math.cos(yaw) * Math.cos(pitch);
+      const targetDist = 14.0;
+
+      const orbitTarget: [number, number, number] = [
+        pos.x + forwardX * targetDist,
+        pos.y + forwardY * targetDist,
+        pos.z + forwardZ * targetDist
+      ];
+
+      useHabitatStore.getState().setOrbitState([pos.x, pos.y, pos.z], orbitTarget);
+      const headingDeg = ((-yaw * 180) / Math.PI + 360) % 360;
+      useHabitatStore.getState().setPlayerTransform(
+        [pos.x, pos.y, pos.z],
+        Math.round(headingDeg),
+        yaw,
+        pitch
+      );
+
+      // Release pointer lock if still held
+      if (document.pointerLockElement === gl.domElement) {
+        try {
+          document.exitPointerLock();
+        } catch (e) {}
+      }
+
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('blur', onWindowBlur);
+      gl.domElement.removeEventListener('click', handleCanvasClick);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
+      document.removeEventListener('pointerlockerror', onPointerLockError);
     };
-  }, [gl, interactWithTargeted, setPointerLocked, toggleFlashlight, toggleHud]);
+  }, [camera, gl.domElement, setPointerLocked]);
 
   useFrame((_, delta) => {
     // Clamp delta to prevent physics blowup on tab unfocus
@@ -197,15 +303,18 @@ export const FirstPersonPlayerController: React.FC = () => {
       camera.getWorldDirection(camDir.current);
       flashlightTargetRef.current.position
         .copy(posRef.current)
-        .add(camDir.current.clone().multiplyScalar(15));
+        .addScaledVector(camDir.current, 15);
+      flashlightTargetRef.current.updateMatrixWorld();
       flashlightRef.current.target = flashlightTargetRef.current;
     }
 
-    // Periodic store sync for compass heading and coordinates
+    // Periodic store sync for compass heading, coordinates, yaw, and pitch
     const headingDeg = ((-yawRef.current * 180) / Math.PI + 360) % 360;
     setPlayerTransform(
       [posRef.current.x, posRef.current.y, posRef.current.z],
-      Math.round(headingDeg)
+      Math.round(headingDeg),
+      yawRef.current,
+      pitchRef.current
     );
 
     // Contextual Equipment Reticle Raycast Detection (within 12m)
@@ -240,13 +349,24 @@ export const FirstPersonPlayerController: React.FC = () => {
       <spotLight
         ref={flashlightRef}
         color="#e0f2fe"
-        intensity={isFlashlightOn ? 4.2 : 0}
-        distance={55}
-        angle={Math.PI / 6}
-        penumbra={0.45}
+        intensity={isFlashlightOn ? 6.5 : 0}
+        distance={48}
+        angle={Math.PI / 5}
+        penumbra={0.42}
+        decay={1.8}
         castShadow
         shadow-bias={-0.001}
       />
+      {/* Astronaut Suit Ambient Foot Beam: illuminates immediate foreground around boots */}
+      {isFlashlightOn && (
+        <pointLight
+          position={[posRef.current.x, posRef.current.y - 0.5, posRef.current.z]}
+          color="#bae6fd"
+          intensity={0.8}
+          distance={5}
+          decay={2}
+        />
+      )}
     </>
   );
 };

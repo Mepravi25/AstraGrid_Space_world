@@ -22,7 +22,11 @@ interface HabitatStoreState {
   isFlashlightOn: boolean;
   hudMode: HudMode;
   playerPosition: [number, number, number];
+  playerYaw: number;
+  playerPitch: number;
   playerHeadingDeg: number;
+  orbitTarget: [number, number, number];
+  orbitCameraPos: [number, number, number];
   targetedEquipmentId: string | null;
 
   // Actions
@@ -37,7 +41,16 @@ interface HabitatStoreState {
   toggleFlashlight: () => void;
   setHudMode: (mode: HudMode) => void;
   toggleHud: () => void;
-  setPlayerTransform: (pos: [number, number, number], headingDeg: number) => void;
+  setPlayerTransform: (
+    pos: [number, number, number],
+    headingDeg: number,
+    yaw?: number,
+    pitch?: number
+  ) => void;
+  setOrbitState: (
+    cameraPos: [number, number, number],
+    target: [number, number, number]
+  ) => void;
   setTargetedEquipmentId: (id: string | null) => void;
   interactWithTargeted: () => void;
   returnToBase: () => void;
@@ -168,7 +181,11 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
     isFlashlightOn: false,
     hudMode: 'explore',
     playerPosition: [0, 1.75, 18], // Spawn astronaut just south of main habitat dome
+    playerYaw: 0,
+    playerPitch: 0,
     playerHeadingDeg: 0,
+    orbitTarget: [0, 1.75, 0],
+    orbitCameraPos: [0, 6, 25],
     targetedEquipmentId: null,
 
     selectEquipment: (id: string | null) => {
@@ -202,15 +219,57 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
     },
 
     resetCameraTarget: () => {
-      set({ cameraTarget: [0, 2, 0] });
+      const { playerPosition, playerYaw, playerPitch } = get();
+      const forwardX = -Math.sin(playerYaw) * Math.cos(playerPitch);
+      const forwardY = Math.sin(playerPitch);
+      const forwardZ = -Math.cos(playerYaw) * Math.cos(playerPitch);
+      set({
+        cameraTarget: [
+          playerPosition[0] + forwardX * 12,
+          playerPosition[1] + forwardY * 12,
+          playerPosition[2] + forwardZ * 12
+        ]
+      });
     },
 
     setExplorationMode: (mode: ExplorationMode) => {
-      set({
-        explorationMode: mode,
-        isPointerLocked: false,
-        cameraTarget: mode === 'free_cam' ? [0, 2, 0] : null
-      });
+      const current = get();
+      if (mode === current.explorationMode) return;
+
+      if (mode === 'free_cam') {
+        // Transitioning from Astronaut to Orbit:
+        // Capture astronaut's current position and viewing direction,
+        // and project an orbit target ahead of the astronaut.
+        const [px, py, pz] = current.playerPosition;
+        const yaw = current.playerYaw;
+        const pitch = current.playerPitch;
+
+        const forwardX = -Math.sin(yaw) * Math.cos(pitch);
+        const forwardY = Math.sin(pitch);
+        const forwardZ = -Math.cos(yaw) * Math.cos(pitch);
+        const targetDistance = 14.0;
+
+        const targetAhead: [number, number, number] = [
+          px + forwardX * targetDistance,
+          py + forwardY * targetDistance,
+          pz + forwardZ * targetDistance
+        ];
+
+        set({
+          explorationMode: 'free_cam',
+          isPointerLocked: false,
+          orbitCameraPos: [px, py, pz],
+          orbitTarget: targetAhead,
+          cameraTarget: null
+        });
+      } else {
+        // Transitioning from Orbit to Astronaut:
+        set({
+          explorationMode: 'first_person',
+          isPointerLocked: false,
+          cameraTarget: null
+        });
+      }
     },
 
     setPointerLocked: (locked: boolean) => {
@@ -233,8 +292,28 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
       });
     },
 
-    setPlayerTransform: (pos: [number, number, number], headingDeg: number) => {
-      set({ playerPosition: pos, playerHeadingDeg: headingDeg });
+    setPlayerTransform: (
+      pos: [number, number, number],
+      headingDeg: number,
+      yaw?: number,
+      pitch?: number
+    ) => {
+      set((state) => ({
+        playerPosition: pos,
+        playerHeadingDeg: headingDeg,
+        playerYaw: yaw !== undefined ? yaw : state.playerYaw,
+        playerPitch: pitch !== undefined ? pitch : state.playerPitch
+      }));
+    },
+
+    setOrbitState: (
+      cameraPos: [number, number, number],
+      target: [number, number, number]
+    ) => {
+      set({
+        orbitCameraPos: cameraPos,
+        orbitTarget: target
+      });
     },
 
     setTargetedEquipmentId: (id: string | null) => {
@@ -258,8 +337,13 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
     returnToBase: () => {
       set({
         playerPosition: [0, 1.75, 18],
+        playerYaw: 0,
+        playerPitch: 0,
         playerHeadingDeg: 0,
-        cameraTarget: [0, 2, 0]
+        orbitCameraPos: [0, 6, 25],
+        orbitTarget: [0, 1.75, 0],
+        cameraTarget: null,
+        selectedEquipmentId: null
       });
     },
 
