@@ -88,10 +88,16 @@ export function resolveHorizontalCollisions(
   for (let i = 0; i < BASE_COLLIDERS.length; i++) {
     const col = BASE_COLLIDERS[i];
 
+    // Broad-phase AABB rejection
+    const bound = col.type === 'cylinder' ? col.radius + playerRadius : Math.max(col.halfWidth, col.halfDepth) + playerRadius;
+    const dx = resX - col.x;
+    const dz = resZ - col.z;
+    if (Math.abs(dx) > bound || Math.abs(dz) > bound) {
+      continue;
+    }
+
     if (col.type === 'cylinder') {
       const minDistance = col.radius + playerRadius;
-      const dx = resX - col.x;
-      const dz = resZ - col.z;
       const distSq = dx * dx + dz * dz;
 
       if (distSq < minDistance * minDistance && distSq > 0.00001) {
@@ -106,9 +112,6 @@ export function resolveHorizontalCollisions(
       // Axis-aligned box collision check
       const halfW = col.halfWidth + playerRadius;
       const halfD = col.halfDepth + playerRadius;
-
-      const dx = resX - col.x;
-      const dz = resZ - col.z;
 
       if (Math.abs(dx) < halfW && Math.abs(dz) < halfD) {
         // Find shortest push-out axis

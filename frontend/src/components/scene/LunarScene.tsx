@@ -1,5 +1,5 @@
 import React, { Suspense, useRef, useEffect } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { LunarSky } from './LunarSky';
 import { LunarTerrain } from './LunarTerrain';
@@ -53,8 +53,6 @@ const AstronautOrbitFlashlight: React.FC = () => {
         angle={Math.PI / 5}
         penumbra={0.42}
         decay={1.8}
-        castShadow
-        shadow-bias={-0.001}
       />
       <pointLight
         position={[playerPosition[0], playerPosition[1] - 0.5, playerPosition[2]]}
@@ -67,9 +65,114 @@ const AstronautOrbitFlashlight: React.FC = () => {
   );
 };
 
-export const LunarScene: React.FC = () => {
+const SceneProfiler: React.FC = () => {
+  const { gl, scene } = useThree();
+  const frameTimes = useRef<number[]>([]);
+  const lastTime = useRef<number>(performance.now());
+  const callsHistory = useRef<number[]>([]);
+  const trianglesHistory = useRef<number[]>([]);
+  const frameCount = useRef(0);
+
+  useFrame(() => {
+    const now = performance.now();
+    const dt = now - lastTime.current;
+    lastTime.current = now;
+    if (dt > 0 && dt < 1000) {
+      frameTimes.current.push(dt);
+      if (frameTimes.current.length > 120) frameTimes.current.shift();
+    }
+
+    callsHistory.current.push(gl.info.render.calls);
+    if (callsHistory.current.length > 120) callsHistory.current.shift();
+
+    trianglesHistory.current.push(gl.info.render.triangles);
+    if (trianglesHistory.current.length > 120) trianglesHistory.current.shift();
+
+    (window as any).__HABITAT_METRICS__ = {
+      getReport: () => {
+        const sorted = [...frameTimes.current].sort((a, b) => a - b);
+        const count = sorted.length;
+        if (count === 0) return null;
+        const avgDt = sorted.reduce((a, b) => a + b, 0) / count;
+        const medianDt = sorted[Math.floor(count * 0.5)];
+        const p95Dt = sorted[Math.floor(count * 0.95)];
+        const minDt = sorted[0];
+        const maxDt = sorted[count - 1];
+        const avgCalls = callsHistory.current.reduce((a, b) => a + b, 0) / (callsHistory.current.length || 1);
+        const avgTriangles = trianglesHistory.current.reduce((a, b) => a + b, 0) / (trianglesHistory.current.length || 1);
+
+        let meshCount = 0;
+        let lightCount = 0;
+        let objectCount = 0;
+        scene.traverse((obj) => {
+          objectCount++;
+          if ((obj as THREE.Mesh).isMesh) meshCount++;
+          if ((obj as THREE.Light).isLight) lightCount++;
+        });
+
+        return {
+          fps: Math.round(1000 / avgDt),
+          avgFrameTimeMs: Number(avgDt.toFixed(2)),
+          medianFrameTimeMs: Number(medianDt.toFixed(2)),
+          p95FrameTimeMs: Number(p95Dt.toFixed(2)),
+          minFrameTimeMs: Number(minDt.toFixed(2)),
+          maxFrameTimeMs: Number(maxDt.toFixed(2)),
+          drawCalls: Math.round(avgCalls),
+          triangles: Math.round(avgTriangles),
+          geometries: gl.info.memory.geometries,
+          textures: gl.info.memory.textures,
+          dpr: gl.getPixelRatio(),
+          viewport: { width: gl.domElement.width, height: gl.domElement.height },
+          objectsTotal: objectCount,
+          meshesTotal: meshCount,
+          lightsTotal: lightCount
+        };
+      }
+    };
+  });
+
+  return null;
+};
+
+const ShadowAndQualityManager: React.FC = () => {
+  const { gl } = useThree();
+  const performanceProfile = useHabitatStore((state) => state.performanceProfile);
+  const shadowFrameCount = useRef(0);
+
+  useEffect(() => {
+    if (performanceProfile === 'quality') {
+      gl.shadowMap.autoUpdate = true;
+      gl.shadowMap.needsUpdate = true;
+    } else {
+      gl.shadowMap.autoUpdate = false;
+      gl.shadowMap.needsUpdate = true;
+    }
+  }, [performanceProfile, gl]);
+
+  useFrame(() => {
+    if (performanceProfile === 'balanced') {
+      shadowFrameCount.current++;
+      // In balanced mode, refresh shadows every 4 frames (75% shadow-pass reduction)
+      if (shadowFrameCount.current % 4 === 0) {
+        gl.shadowMap.needsUpdate = true;
+      }
+    }
+  });
+
+  return null;
+};
+
+export const LunarScene: React.FC = React.memo(() => {
   const selectEquipment = useHabitatStore((state) => state.selectEquipment);
   const explorationMode = useHabitatStore((state) => state.explorationMode);
+  const performanceProfile = useHabitatStore((state) => state.performanceProfile);
+
+  const dpr =
+    performanceProfile === 'quality'
+      ? 1.5
+      : performanceProfile === 'balanced'
+      ? 1.2
+      : 1.0;
 
   return (
     <div
@@ -77,8 +180,10 @@ export const LunarScene: React.FC = () => {
     >
       <Canvas
         shadows
+        dpr={dpr}
+        performance={{ min: 0.5 }}
         camera={{ position: [0, 1.75, 14], fov: 68, near: 0.1, far: 950 }}
-        gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
+        gl={{ antialias: true, alpha: false, powerPreference: 'high-performance', stencil: false }}
         onCreated={({ gl }) => {
           gl.shadowMap.type = THREE.PCFSoftShadowMap;
           gl.toneMapping = THREE.ACESFilmicToneMapping;
@@ -95,16 +200,16 @@ export const LunarScene: React.FC = () => {
           intensity={SUN_LIGHT_INTENSITY}
           color={SUN_LIGHT_COLOR}
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-near={100}
           shadow-camera-far={420}
           shadow-camera-left={-125}
           shadow-camera-right={125}
           shadow-camera-top={125}
           shadow-camera-bottom={-125}
-          shadow-bias={-0.00025}
-          shadow-normalBias={0.015}
+          shadow-bias={-0.0003}
+          shadow-normalBias={0.02}
         />
 
         {/* 2. Restrained Secondary Regolith / Earthshine Bounce (Preserves shadow visibility without haze) */}
@@ -113,6 +218,8 @@ export const LunarScene: React.FC = () => {
         />
 
         <Suspense fallback={null}>
+          <SceneProfiler />
+          <ShadowAndQualityManager />
           <LunarSky />
           <LunarTerrain />
           <HabitatComplex />
@@ -128,4 +235,4 @@ export const LunarScene: React.FC = () => {
       </Canvas>
     </div>
   );
-};
+});

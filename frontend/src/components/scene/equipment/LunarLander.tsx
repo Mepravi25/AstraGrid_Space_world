@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useHabitatStore } from '../../../store/useHabitatStore';
 import { EquipmentStatusIndicator } from '../EquipmentStatusIndicator';
@@ -21,12 +20,6 @@ export const LunarLander: React.FC<LunarLanderProps> = ({ id }) => {
   const status = equipment?.status || 'nominal';
   const rawPos = equipment?.position || [85, 0, -75];
   const groundY = getLunarHeight(rawPos[0], rawPos[2]);
-
-  useFrame((state) => {
-    if (groupRef.current && isSelected) {
-      // Subtle pulse or indicator beacon
-    }
-  });
 
   return (
     <group

@@ -5,6 +5,24 @@ import { EquipmentStatusIndicator } from '../EquipmentStatusIndicator';
 
 import { getLunarHeight } from '../../../utils/terrainMath';
 
+// Shared static geometries & materials
+const bermTorusGeo = new THREE.TorusGeometry(4.2, 1.2, 8, 20);
+const pitCylGeo = new THREE.CylinderGeometry(3.2, 3.6, 0.3, 16);
+const coreVesselGeo = new THREE.CylinderGeometry(0.9, 0.9, 1.8, 16);
+const coreBandGeo = new THREE.CylinderGeometry(0.94, 0.94, 0.12, 16);
+const sodiumPipeGeo = new THREE.CylinderGeometry(0.3, 0.3, 1.5, 12);
+const stirlingRingGeo = new THREE.CylinderGeometry(1.4, 1.4, 0.3, 16);
+const stirlingCylGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.6, 8);
+const radiatorConeGeo = new THREE.ConeGeometry(3.8, 2.8, 16, 1, true);
+const ribBoxGeo = new THREE.BoxGeometry(0.06, 3.2, 0.08);
+const postCylGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.6, 8);
+const postSphGeo = new THREE.SphereGeometry(0.1, 8, 8);
+
+const stirlingMat = new THREE.MeshStandardMaterial({ color: '#e2e8f0', metalness: 0.9 });
+const ribMat = new THREE.MeshStandardMaterial({ color: '#eab308', metalness: 0.9 });
+const postMat = new THREE.MeshStandardMaterial({ color: '#f59e0b', metalness: 0.7 });
+const strobeMat = new THREE.MeshBasicMaterial({ color: '#f59e0b' });
+
 interface NuclearPowerUnitProps {
   id: string;
 }
@@ -44,21 +62,18 @@ export const NuclearPowerUnit: React.FC<NuclearPowerUnitProps> = ({ id }) => {
       />
 
       {/* Regolith Radiation Shield Excavation Berm Ring */}
-      <mesh position={[0, 0.4, 0]}>
-        <torusGeometry args={[4.2, 1.2, 8, 24]} />
+      <mesh geometry={bermTorusGeo} position={[0, 0.4, 0]}>
         <meshStandardMaterial color="#2d3039" roughness={0.95} />
       </mesh>
 
       {/* Central Excavation Pit Base */}
-      <mesh position={[0, 0.15, 0]}>
-        <cylinderGeometry args={[3.2, 3.6, 0.3, 16]} />
+      <mesh geometry={pitCylGeo} position={[0, 0.15, 0]}>
         <meshStandardMaterial color="#1e222a" roughness={0.9} />
       </mesh>
 
       {/* Reactor Core Vessel (U-235 Solid Block in BeO Reflector) */}
       <group position={[0, 1.2, 0]}>
-        <mesh castShadow receiveShadow>
-          <cylinderGeometry args={[0.9, 0.9, 1.8, 24]} />
+        <mesh geometry={coreVesselGeo} castShadow receiveShadow>
           <meshStandardMaterial
             color={hovered ? '#cbd5e1' : '#64748b'}
             metalness={0.9}
@@ -67,23 +82,20 @@ export const NuclearPowerUnit: React.FC<NuclearPowerUnitProps> = ({ id }) => {
         </mesh>
         {/* Core Shield Containment Bands */}
         {[-0.6, 0, 0.6].map((y, i) => (
-          <mesh key={i} position={[0, y, 0]}>
-            <cylinderGeometry args={[0.94, 0.94, 0.12, 24]} />
+          <mesh key={i} geometry={coreBandGeo} position={[0, y, 0]}>
             <meshStandardMaterial color="#f59e0b" metalness={0.8} />
           </mesh>
         ))}
       </group>
 
       {/* Sodium Heat-Pipe Manifold Column */}
-      <mesh position={[0, 2.8, 0]} castShadow>
-        <cylinderGeometry args={[0.3, 0.3, 1.5, 16]} />
+      <mesh geometry={sodiumPipeGeo} position={[0, 2.8, 0]} castShadow>
         <meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.1} />
       </mesh>
 
       {/* 8-Stirling Engine Power Conversion Ring */}
       <group position={[0, 3.6, 0]}>
-        <mesh>
-          <cylinderGeometry args={[1.4, 1.4, 0.3, 16]} />
+        <mesh geometry={stirlingRingGeo}>
           <meshStandardMaterial color="#334155" metalness={0.8} />
         </mesh>
         {/* Stirling Engine Cylinders */}
@@ -92,10 +104,14 @@ export const NuclearPowerUnit: React.FC<NuclearPowerUnitProps> = ({ id }) => {
           const x = Math.cos(angle) * 1.1;
           const z = Math.sin(angle) * 1.1;
           return (
-            <mesh key={i} position={[x, 0, z]} rotation={[0, -angle, 0]} castShadow>
-              <cylinderGeometry args={[0.18, 0.18, 0.6, 8]} />
-              <meshStandardMaterial color="#e2e8f0" metalness={0.9} />
-            </mesh>
+            <mesh
+              key={i}
+              geometry={stirlingCylGeo}
+              material={stirlingMat}
+              position={[x, 0, z]}
+              rotation={[0, -angle, 0]}
+              castShadow
+            />
           );
         })}
       </group>
@@ -103,8 +119,7 @@ export const NuclearPowerUnit: React.FC<NuclearPowerUnitProps> = ({ id }) => {
       {/* Distinctive Kilopower Umbrella Conical Heat Radiator Array */}
       <group position={[0, 5.2, 0]}>
         {/* Conical Radiator Fins (inverted umbrella) */}
-        <mesh castShadow>
-          <coneGeometry args={[3.8, 2.8, 16, 1, true]} />
+        <mesh geometry={radiatorConeGeo} castShadow>
           <meshStandardMaterial
             color="#1e293b"
             metalness={0.85}
@@ -118,12 +133,11 @@ export const NuclearPowerUnit: React.FC<NuclearPowerUnitProps> = ({ id }) => {
           return (
             <mesh
               key={i}
+              geometry={ribBoxGeo}
+              material={ribMat}
               position={[Math.cos(angle) * 1.8, -0.2, Math.sin(angle) * 1.8]}
               rotation={[0, -angle, 0.7]}
-            >
-              <boxGeometry args={[0.06, 3.2, 0.08]} />
-              <meshStandardMaterial color="#eab308" metalness={0.9} />
-            </mesh>
+            />
           );
         })}
       </group>
@@ -136,20 +150,16 @@ export const NuclearPowerUnit: React.FC<NuclearPowerUnitProps> = ({ id }) => {
         [-4.5, 4.5],
       ].map(([px, pz], idx) => (
         <group key={idx} position={[px, 0, pz]}>
-          <mesh position={[0, 0.8, 0]}>
-            <cylinderGeometry args={[0.04, 0.04, 1.6, 8]} />
-            <meshStandardMaterial color="#f59e0b" metalness={0.7} />
-          </mesh>
+          <mesh geometry={postCylGeo} material={postMat} position={[0, 0.8, 0]} />
           {/* Amber warning flashing strobe */}
-          <mesh position={[0, 1.65, 0]}>
-            <sphereGeometry args={[0.1, 8, 8]} />
-            <meshBasicMaterial color="#f59e0b" />
-          </mesh>
+          <mesh geometry={postSphGeo} material={strobeMat} position={[0, 1.65, 0]} />
         </group>
       ))}
 
-      {/* High-Temperature Core Thermal Glow */}
-      <pointLight color="#f59e0b" intensity={0.9} distance={8} position={[0, 1.5, 0]} />
+      {/* High-Temperature Core Thermal Glow (active when online) */}
+      {status !== 'offline' && (
+        <pointLight color="#f59e0b" intensity={0.7} distance={6} position={[0, 1.5, 0]} />
+      )}
     </group>
   );
 };

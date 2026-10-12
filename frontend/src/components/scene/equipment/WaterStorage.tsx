@@ -5,6 +5,18 @@ import { EquipmentStatusIndicator } from '../EquipmentStatusIndicator';
 
 import { getLunarHeight } from '../../../utils/terrainMath';
 
+// Shared static geometries
+const hexPadGeo = new THREE.CylinderGeometry(3.8, 4.2, 0.3, 6);
+const legAGeo = new THREE.CylinderGeometry(0.08, 0.12, 2.0, 8);
+const legBGeo = new THREE.CylinderGeometry(0.08, 0.12, 1.8, 8);
+const tankAGeo = new THREE.SphereGeometry(1.5, 20, 20);
+const tankBGeo = new THREE.SphereGeometry(1.3, 20, 20);
+const ringAGeo = new THREE.TorusGeometry(1.52, 0.08, 8, 24);
+const ringBGeo = new THREE.TorusGeometry(1.32, 0.07, 8, 24);
+const glassGeo = new THREE.BoxGeometry(0.08, 1.6, 0.03);
+const pipeGeo = new THREE.CylinderGeometry(0.09, 0.09, 2.6, 10);
+const valveGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.35, 10);
+
 interface WaterStorageProps {
   id: string;
 }
@@ -16,15 +28,13 @@ export const WaterStorage: React.FC<WaterStorageProps> = ({ id }) => {
   const equipment = useHabitatStore((state) => state.equipment.find((e) => e.id === id));
   const selectedEquipmentId = useHabitatStore((state) => state.selectedEquipmentId);
   const selectEquipment = useHabitatStore((state) => state.selectEquipment);
-  const telemetry = useHabitatStore((state) => state.telemetry);
+  // Subscribe strictly to waterReservePct to eliminate per-sol re-renders
+  const waterPct = useHabitatStore((state) => state.telemetry.waterReservePct);
 
   const isSelected = selectedEquipmentId === id;
   const status = equipment?.status || 'nominal';
   const rawPos = equipment?.position || [28, 0, -24];
   const groundY = getLunarHeight(rawPos[0], rawPos[2]);
-
-  // Water level ratio
-  const waterPct = telemetry.waterReservePct;
 
   return (
     <group
@@ -48,8 +58,7 @@ export const WaterStorage: React.FC<WaterStorageProps> = ({ id }) => {
       />
 
       {/* Hexagonal Foundation Stanchion Pad */}
-      <mesh position={[0, 0.15, 0]} receiveShadow>
-        <cylinderGeometry args={[3.8, 4.2, 0.3, 6]} />
+      <mesh geometry={hexPadGeo} position={[0, 0.15, 0]} receiveShadow>
         <meshStandardMaterial color="#334155" roughness={0.85} />
       </mesh>
 
@@ -57,15 +66,13 @@ export const WaterStorage: React.FC<WaterStorageProps> = ({ id }) => {
       <group position={[-1.4, 2.2, 0]}>
         {/* Support Tripod Legs */}
         {[-0.8, 0.8].map((x, i) => (
-          <mesh key={i} position={[x, -1.0, 0]} rotation={[0, 0, x > 0 ? -0.2 : 0.2]}>
-            <cylinderGeometry args={[0.08, 0.12, 2.0, 8]} />
+          <mesh key={i} geometry={legAGeo} position={[x, -1.0, 0]} rotation={[0, 0, x > 0 ? -0.2 : 0.2]}>
             <meshStandardMaterial color="#64748b" metalness={0.8} />
           </mesh>
         ))}
 
         {/* Spherical Tank Outer Shell with MLI Multi-Layer Gold/Silver Sheen */}
-        <mesh castShadow receiveShadow>
-          <sphereGeometry args={[1.5, 24, 24]} />
+        <mesh geometry={tankAGeo} castShadow receiveShadow>
           <meshStandardMaterial
             color={hovered ? '#f8fafc' : '#e2e8f0'}
             metalness={0.85}
@@ -74,19 +81,17 @@ export const WaterStorage: React.FC<WaterStorageProps> = ({ id }) => {
         </mesh>
 
         {/* Equatorial Reinforcement Belly Band */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[1.52, 0.08, 8, 32]} />
+        <mesh geometry={ringAGeo} rotation={[-Math.PI / 2, 0, 0]}>
           <meshStandardMaterial color="#0284c7" metalness={0.8} />
         </mesh>
 
         {/* Vertical Liquid Level Sight Glass Indicator */}
-        <mesh position={[0, 0, 1.52]}>
-          <boxGeometry args={[0.08, 1.6, 0.03]} />
+        <mesh geometry={glassGeo} position={[0, 0, 1.52]}>
           <meshStandardMaterial color="#0f172a" />
         </mesh>
         {/* Glowing Water Level Strip */}
         <mesh position={[0, -0.8 + (1.6 * (waterPct / 100)) / 2, 1.54]}>
-          <boxGeometry args={[0.04, 1.6 * (waterPct / 100), 0.02]} />
+          <boxGeometry args={[0.04, Math.max(0.01, 1.6 * (waterPct / 100)), 0.02]} />
           <meshBasicMaterial color="#38bdf8" />
         </mesh>
       </group>
@@ -95,15 +100,13 @@ export const WaterStorage: React.FC<WaterStorageProps> = ({ id }) => {
       <group position={[1.4, 2.0, 0.2]}>
         {/* Support Tripod Legs */}
         {[-0.7, 0.7].map((x, i) => (
-          <mesh key={i} position={[x, -0.9, 0]} rotation={[0, 0, x > 0 ? -0.2 : 0.2]}>
-            <cylinderGeometry args={[0.08, 0.12, 1.8, 8]} />
+          <mesh key={i} geometry={legBGeo} position={[x, -0.9, 0]} rotation={[0, 0, x > 0 ? -0.2 : 0.2]}>
             <meshStandardMaterial color="#64748b" metalness={0.8} />
           </mesh>
         ))}
 
         {/* Spherical Tank */}
-        <mesh castShadow receiveShadow>
-          <sphereGeometry args={[1.3, 24, 24]} />
+        <mesh geometry={tankBGeo} castShadow receiveShadow>
           <meshStandardMaterial
             color={hovered ? '#fef08a' : '#eab308'}
             metalness={0.7}
@@ -112,21 +115,18 @@ export const WaterStorage: React.FC<WaterStorageProps> = ({ id }) => {
         </mesh>
 
         {/* Equatorial Band */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[1.32, 0.07, 8, 32]} />
+        <mesh geometry={ringBGeo} rotation={[-Math.PI / 2, 0, 0]}>
           <meshStandardMaterial color="#0284c7" metalness={0.8} />
         </mesh>
       </group>
 
       {/* Fluid Transfer Manifold & Valve Pipe connecting tanks */}
-      <mesh position={[0, 2.1, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.09, 0.09, 2.6, 12]} />
+      <mesh geometry={pipeGeo} position={[0, 2.1, 0]} rotation={[0, 0, Math.PI / 2]}>
         <meshStandardMaterial color="#38bdf8" metalness={0.9} roughness={0.15} />
       </mesh>
 
       {/* Central Flow Meter & Pressure Relief Actuator */}
-      <mesh position={[0, 2.1, 0]}>
-        <cylinderGeometry args={[0.22, 0.22, 0.35, 12]} />
+      <mesh geometry={valveGeo} position={[0, 2.1, 0]}>
         <meshStandardMaterial color="#0f172a" metalness={0.8} />
       </mesh>
     </group>

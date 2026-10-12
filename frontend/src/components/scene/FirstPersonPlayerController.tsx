@@ -13,14 +13,7 @@ export const FirstPersonPlayerController: React.FC = () => {
   const setTargetedEquipmentId = useHabitatStore((state) => state.setTargetedEquipmentId);
   const setPlayerTransform = useHabitatStore((state) => state.setPlayerTransform);
   const equipment = useHabitatStore((state) => state.equipment);
-
-  const initialPos = useHabitatStore((state) => state.playerPosition);
-  const initialYaw = useHabitatStore((state) => state.playerYaw);
-  const initialPitch = useHabitatStore((state) => state.playerPitch);
   const teleportSignal = useHabitatStore((state) => state.teleportSignal);
-  const playerPosition = useHabitatStore((state) => state.playerPosition);
-  const playerYaw = useHabitatStore((state) => state.playerYaw);
-  const playerPitch = useHabitatStore((state) => state.playerPitch);
 
   // Astronaut physical constants
   const EYE_HEIGHT = 1.75;
@@ -29,14 +22,21 @@ export const FirstPersonPlayerController: React.FC = () => {
   const JUMP_IMPULSE = 5.2;
   const GRAVITY = -11.5; // Tuned for responsive lunar bounding
 
-  // Player physics state - initialized from store authoritative navigation state
-  const posRef = useRef(new THREE.Vector3(initialPos[0], initialPos[1], initialPos[2]));
+  // Player physics state - initialized once from store authoritative navigation state
+  const initialTransform = useHabitatStore.getState();
+  const posRef = useRef(
+    new THREE.Vector3(
+      initialTransform.playerPosition[0],
+      initialTransform.playerPosition[1],
+      initialTransform.playerPosition[2]
+    )
+  );
   const velRef = useRef(new THREE.Vector3(0, 0, 0));
   const isGroundedRef = useRef(true);
 
   // Camera orientation angles (Euler YXZ) - initialized from store
-  const yawRef = useRef(initialYaw);
-  const pitchRef = useRef(initialPitch);
+  const yawRef = useRef(initialTransform.playerYaw);
+  const pitchRef = useRef(initialTransform.playerPitch);
 
   // Key tracking
   const keysRef = useRef<{ [key: string]: boolean }>({});
@@ -51,24 +51,30 @@ export const FirstPersonPlayerController: React.FC = () => {
   const moveDir = useRef(new THREE.Vector3());
   const camDir = useRef(new THREE.Vector3());
   const objVec = useRef(new THREE.Vector3());
+  const toObjectVec = useRef(new THREE.Vector3());
 
   // Throttled store sync refs to avoid per-frame React re-renders
   const lastSyncTimeRef = useRef(0);
   const lastSyncedPosRef = useRef(new THREE.Vector3());
+  const lastSyncedYawRef = useRef(0);
   const lastTargetedIdRef = useRef<string | null>(null);
+  const raycastFrameCountRef = useRef(0);
 
   // Listen to teleport signal (e.g. Return to Base button)
   useEffect(() => {
     if (teleportSignal > 0) {
-      posRef.current.set(playerPosition[0], playerPosition[1], playerPosition[2]);
-      yawRef.current = playerYaw;
-      pitchRef.current = playerPitch;
+      const state = useHabitatStore.getState();
+      posRef.current.set(state.playerPosition[0], state.playerPosition[1], state.playerPosition[2]);
+      yawRef.current = state.playerYaw;
+      pitchRef.current = state.playerPitch;
+      lastSyncedPosRef.current.copy(posRef.current);
+      lastSyncedYawRef.current = yawRef.current;
       velRef.current.set(0, 0, 0);
       camera.position.copy(posRef.current);
       camera.rotation.order = 'YXZ';
       camera.rotation.set(pitchRef.current, yawRef.current, 0);
     }
-  }, [teleportSignal, playerPosition, playerYaw, playerPitch, camera]);
+  }, [teleportSignal, camera]);
 
   // Setup input listeners and pointer lock management
   useEffect(() => {
@@ -332,53 +338,58 @@ export const FirstPersonPlayerController: React.FC = () => {
     }
 
     // Throttled store sync for compass heading, coordinates, yaw, and pitch
-    // Eliminates per-frame React state updates during continuous movement
+    // Only fires if astronaut has genuinely moved (>0.04m²) or rotated (>0.02 rad)
     const now = performance.now();
-    const distSqSinceSync = posRef.current.distanceToSquared(lastSyncedPosRef.current);
-    if (now - lastSyncTimeRef.current > 120 || distSqSinceSync > 0.08) {
-      lastSyncTimeRef.current = now;
-      lastSyncedPosRef.current.copy(posRef.current);
-      const headingDeg = ((-yawRef.current * 180) / Math.PI + 360) % 360;
-      setPlayerTransform(
-        [posRef.current.x, posRef.current.y, posRef.current.z],
-        Math.round(headingDeg),
-        yawRef.current,
-        pitchRef.current
-      );
-    }
-
-    // Contextual Equipment Reticle Raycast Detection (within 12m)
-    camera.getWorldDirection(camDir.current);
-    let closestId: string | null = null;
-    let closestDist = 12.0; // Max interact reach in meters
-
-    for (let i = 0; i < equipment.length; i++) {
-      const eq = equipment[i];
-      objVec.current.set(eq.position[0], eq.position[1] + 1.2, eq.position[2]);
-      const dist = posRef.current.distanceTo(objVec.current);
-
-      if (dist < closestDist) {
-        // Calculate angle between camera gaze direction and object vector
-        const toObject = objVec.current.clone().sub(posRef.current).normalize();
-        const dot = camDir.current.dot(toObject);
-        // dot > 0.82 corresponds to within ~35 degrees cone of view
-        if (dot > 0.82) {
-          closestDist = dist;
-          closestId = eq.id;
-        }
+    if (now - lastSyncTimeRef.current > 120) {
+      const distSqSinceSync = posRef.current.distanceToSquared(lastSyncedPosRef.current);
+      const yawDiff = Math.abs(yawRef.current - lastSyncedYawRef.current);
+      if (distSqSinceSync > 0.04 || yawDiff > 0.02) {
+        lastSyncTimeRef.current = now;
+        lastSyncedPosRef.current.copy(posRef.current);
+        lastSyncedYawRef.current = yawRef.current;
+        const headingDeg = ((-yawRef.current * 180) / Math.PI + 360) % 360;
+        setPlayerTransform(
+          [posRef.current.x, posRef.current.y, posRef.current.z],
+          Math.round(headingDeg),
+          yawRef.current,
+          pitchRef.current
+        );
       }
     }
 
-    if (closestId !== lastTargetedIdRef.current) {
-      lastTargetedIdRef.current = closestId;
-      setTargetedEquipmentId(closestId);
+    // Contextual Equipment Reticle Raycast Detection (tested every 3 frames with squared distance check)
+    raycastFrameCountRef.current++;
+    if (raycastFrameCountRef.current % 3 === 0) {
+      camera.getWorldDirection(camDir.current);
+      let closestId: string | null = null;
+      let closestDistSq = 144.0; // Max interact reach in meters (12m squared)
+
+      for (let i = 0; i < equipment.length; i++) {
+        const eq = equipment[i];
+        objVec.current.set(eq.position[0], eq.position[1] + 1.2, eq.position[2]);
+        const distSq = posRef.current.distanceToSquared(objVec.current);
+
+        if (distSq < closestDistSq) {
+          toObjectVec.current.subVectors(objVec.current, posRef.current).normalize();
+          const dot = camDir.current.dot(toObjectVec.current);
+          if (dot > 0.82) {
+            closestDistSq = distSq;
+            closestId = eq.id;
+          }
+        }
+      }
+
+      if (closestId !== lastTargetedIdRef.current) {
+        lastTargetedIdRef.current = closestId;
+        setTargetedEquipmentId(closestId);
+      }
     }
   });
 
   return (
     <>
       <primitive object={flashlightTargetRef.current} />
-      {/* Astronaut Suit Helmet Spotlight */}
+      {/* Astronaut Suit Helmet Spotlight (Optimized: direct illumination without costly shadow pass) */}
       <spotLight
         ref={flashlightRef}
         color="#e0f2fe"
@@ -387,8 +398,6 @@ export const FirstPersonPlayerController: React.FC = () => {
         angle={Math.PI / 5}
         penumbra={0.42}
         decay={1.8}
-        castShadow
-        shadow-bias={-0.001}
       />
       {/* Astronaut Suit Ambient Foot Beam: illuminates immediate foreground around boots */}
       {isFlashlightOn && (

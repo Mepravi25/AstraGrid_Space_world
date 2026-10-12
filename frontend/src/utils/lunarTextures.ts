@@ -8,6 +8,12 @@ let cachedRegolithMap: THREE.CanvasTexture | null = null;
 let cachedRegolithBump: THREE.CanvasTexture | null = null;
 let cachedSolarPanelMap: THREE.CanvasTexture | null = null;
 let cachedSunCoronaMap: THREE.CanvasTexture | null = null;
+let cachedEarthFallback: {
+  dayMap: THREE.CanvasTexture;
+  nightMap: THREE.CanvasTexture;
+  cloudsMap: THREE.CanvasTexture;
+  specularMap: THREE.CanvasTexture;
+} | null = null;
 
 /**
  * Generate high-detail procedural lunar regolith textures (diffuse + bump map)
@@ -266,6 +272,8 @@ export function createProceduralEarthFallback(): {
   cloudsMap: THREE.CanvasTexture;
   specularMap: THREE.CanvasTexture;
 } {
+  if (cachedEarthFallback) return cachedEarthFallback;
+
   const w = 1024;
   const h = 512;
 
@@ -400,10 +408,12 @@ export function createProceduralEarthFallback(): {
   sCtx.ellipse(w * 0.82, h * 0.72, w * 0.07, h * 0.09, 0, 0, Math.PI * 2);
   sCtx.fill();
 
-  return {
+  cachedEarthFallback = {
     dayMap: new THREE.CanvasTexture(dayCanvas),
     nightMap: new THREE.CanvasTexture(nightCanvas),
     cloudsMap: new THREE.CanvasTexture(cloudsCanvas),
     specularMap: new THREE.CanvasTexture(specCanvas)
   };
+
+  return cachedEarthFallback;
 }

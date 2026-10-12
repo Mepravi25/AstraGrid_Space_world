@@ -24,6 +24,8 @@ export const ExplorationOverlay: React.FC = () => {
   const selectedEquipmentId = useHabitatStore((state) => state.selectedEquipmentId);
   const equipmentList = useHabitatStore((state) => state.equipment);
 
+  const performanceProfile = useHabitatStore((state) => state.performanceProfile);
+  const setPerformanceProfile = useHabitatStore((state) => state.setPerformanceProfile);
   const setExplorationMode = useHabitatStore((state) => state.setExplorationMode);
   const toggleFlashlight = useHabitatStore((state) => state.toggleFlashlight);
   const setHudMode = useHabitatStore((state) => state.setHudMode);
@@ -199,6 +201,24 @@ export const ExplorationOverlay: React.FC = () => {
 
         {/* Right: Quick Astronaut Tool Controls */}
         <div className="flex items-center gap-1.5">
+          {/* 3D Performance Profile Mode Selector */}
+          <div className="flex items-center gap-0.5 p-0.5 rounded bg-slate-950/80 border border-slate-800 font-mono text-[10px]">
+            {(['quality', 'balanced', 'performance'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setPerformanceProfile(mode)}
+                className={`px-1.5 py-0.5 rounded transition-all cursor-pointer ${
+                  performanceProfile === mode
+                    ? 'bg-emerald-500/25 border border-emerald-400 text-emerald-300 font-bold'
+                    : 'text-slate-500 hover:text-slate-300 border border-transparent'
+                }`}
+                title={`3D Profile: ${mode.toUpperCase()} (Quality vs Framerate)`}
+              >
+                {mode === 'quality' ? 'QUAL' : mode === 'balanced' ? 'BAL' : 'PERF'}
+              </button>
+            ))}
+          </div>
+
           {/* Flashlight toggle with explicit ON/OFF status */}
           <button
             onClick={toggleFlashlight}

@@ -18,7 +18,7 @@ export const LunarSky: React.FC = () => {
       <Stars
         radius={650}
         depth={120}
-        count={9200}
+        count={3500}
         factor={3.8}
         saturation={0}
         fade

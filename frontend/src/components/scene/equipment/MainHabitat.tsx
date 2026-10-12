@@ -3,6 +3,20 @@ import * as THREE from 'three';
 import { useHabitatStore } from '../../../store/useHabitatStore';
 import { EquipmentStatusIndicator } from '../EquipmentStatusIndicator';
 
+// Shared static geometries for MainHabitat
+const bermCylGeo = new THREE.CylinderGeometry(5.8, 6.4, 0.4, 24);
+const mainDomeGeo = new THREE.SphereGeometry(4.5, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2);
+const ribDomeGeo = new THREE.SphereGeometry(4.52, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+const cupolaGeo = new THREE.SphereGeometry(0.95, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+const cupolaRingGeo = new THREE.TorusGeometry(0.95, 0.08, 8, 20);
+const crewBaseGeo = new THREE.CylinderGeometry(3.0, 3.3, 0.3, 20);
+const crewDomeGeo = new THREE.SphereGeometry(2.8, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+const windowCircleGeo = new THREE.CircleGeometry(0.3, 12);
+const corridorCylGeo = new THREE.CylinderGeometry(1.0, 1.0, 3.2, 14);
+const airlockBoxGeo = new THREE.BoxGeometry(1.8, 1.8, 2.2);
+const hatchBoxGeo = new THREE.BoxGeometry(1.2, 1.4, 0.08);
+const ledBoxGeo = new THREE.BoxGeometry(0.4, 0.08, 0.04);
+
 interface MainHabitatProps {
   id: string;
 }
@@ -42,14 +56,12 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       />
 
       {/* Regolith Berm Foundation Base */}
-      <mesh position={[0, 0.2, 0]} receiveShadow>
-        <cylinderGeometry args={[5.8, 6.4, 0.4, 32]} />
+      <mesh geometry={bermCylGeo} position={[0, 0.2, 0]} receiveShadow>
         <meshStandardMaterial color="#475569" roughness={0.8} />
       </mesh>
 
       {/* Primary Command Geodesic Dome */}
-      <mesh position={[0, 0.4, 0]} castShadow receiveShadow>
-        <sphereGeometry args={[4.5, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+      <mesh geometry={mainDomeGeo} position={[0, 0.4, 0]} castShadow receiveShadow>
         <meshStandardMaterial
           color={hovered ? '#e2e8f0' : '#f8fafc'}
           roughness={0.35}
@@ -59,8 +71,7 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       </mesh>
 
       {/* Hexagonal Surface Structural Ribs (Geodesic look) */}
-      <mesh position={[0, 0.42, 0]}>
-        <sphereGeometry args={[4.52, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+      <mesh geometry={ribDomeGeo} position={[0, 0.42, 0]}>
         <meshStandardMaterial
           color="#38bdf8"
           roughness={0.2}
@@ -71,8 +82,7 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       </mesh>
 
       {/* Top Observatory Cupola */}
-      <mesh position={[0, 4.8, 0]} castShadow receiveShadow>
-        <sphereGeometry args={[0.95, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+      <mesh geometry={cupolaGeo} position={[0, 4.8, 0]} castShadow receiveShadow>
         <meshStandardMaterial
           color="#0284c7"
           roughness={0.1}
@@ -83,8 +93,7 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       </mesh>
 
       {/* Cupola Window Frame Ring */}
-      <mesh position={[0, 4.8, 0]} rotation={[-Math.PI / 2, 0, 0]} castShadow receiveShadow>
-        <torusGeometry args={[0.95, 0.08, 8, 24]} />
+      <mesh geometry={cupolaRingGeo} position={[0, 4.8, 0]} rotation={[-Math.PI / 2, 0, 0]} castShadow receiveShadow>
         <meshStandardMaterial color="#334155" metalness={0.8} />
       </mesh>
 
@@ -107,18 +116,15 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       {/* Secondary Crew Quarters Dome (East side) */}
       <group position={[5.2, 0, 2.2]}>
         {/* Foundation */}
-        <mesh position={[0, 0.15, 0]} receiveShadow>
-          <cylinderGeometry args={[3.0, 3.3, 0.3, 24]} />
+        <mesh geometry={crewBaseGeo} position={[0, 0.15, 0]} receiveShadow>
           <meshStandardMaterial color="#475569" roughness={0.8} />
         </mesh>
         {/* Habitat shell */}
-        <mesh position={[0, 0.3, 0]} castShadow receiveShadow>
-          <sphereGeometry args={[2.8, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <mesh geometry={crewDomeGeo} position={[0, 0.3, 0]} castShadow receiveShadow>
           <meshStandardMaterial color="#f1f5f9" roughness={0.4} metalness={0.2} />
         </mesh>
         {/* Porthole windows with warm interior glow */}
-        <mesh position={[1.8, 1.4, 1.2]} rotation={[0, 0.8, 0]}>
-          <circleGeometry args={[0.3, 16]} />
+        <mesh geometry={windowCircleGeo} position={[1.8, 1.4, 1.2]} rotation={[0, 0.8, 0]}>
           <meshStandardMaterial
             color="#38bdf8"
             emissive="#38bdf8"
@@ -129,20 +135,17 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
       </group>
 
       {/* Pressurized Transit Corridor between Central & Crew Dome */}
-      <mesh position={[2.6, 1.2, 1.1]} rotation={[0, -0.4, Math.PI / 2]} castShadow receiveShadow>
-        <cylinderGeometry args={[1.0, 1.0, 3.2, 16]} />
+      <mesh geometry={corridorCylGeo} position={[2.6, 1.2, 1.1]} rotation={[0, -0.4, Math.PI / 2]} castShadow receiveShadow>
         <meshStandardMaterial color="#cbd5e1" metalness={0.5} roughness={0.4} />
       </mesh>
 
       {/* Main Egress Airlock Module (Front / South side) */}
       <group position={[0, 0, 4.4]}>
-        <mesh position={[0, 1.0, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.8, 1.8, 2.2]} />
+        <mesh geometry={airlockBoxGeo} position={[0, 1.0, 0]} castShadow receiveShadow>
           <meshStandardMaterial color="#94a3b8" metalness={0.6} roughness={0.4} />
         </mesh>
         {/* Outer Airlock Hatch Door */}
-        <mesh position={[0, 1.0, 1.11]}>
-          <boxGeometry args={[1.2, 1.4, 0.08]} />
+        <mesh geometry={hatchBoxGeo} position={[0, 1.0, 1.11]}>
           <meshStandardMaterial
             color="#0f172a"
             metalness={0.9}
@@ -150,14 +153,13 @@ export const MainHabitat: React.FC<MainHabitatProps> = ({ id }) => {
           />
         </mesh>
         {/* Status indicator LED over hatch */}
-        <mesh position={[0, 1.85, 1.12]}>
-          <boxGeometry args={[0.4, 0.08, 0.04]} />
+        <mesh geometry={ledBoxGeo} position={[0, 1.85, 1.12]}>
           <meshBasicMaterial color="#10b981" />
         </mesh>
       </group>
 
       {/* Interior Habitat Illumination Glow leaking out */}
-      <pointLight color="#38bdf8" intensity={0.8} distance={8} position={[0, 3, 0]} />
+      <pointLight color="#38bdf8" intensity={0.6} distance={5} position={[0, 3, 0]} />
     </group>
   );
 };

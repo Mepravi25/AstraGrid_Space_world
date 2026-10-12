@@ -6,6 +6,7 @@ import { PREDEFINED_SCENARIOS } from '../data/scenarios';
 
 export type ExplorationMode = 'first_person' | 'free_cam';
 export type HudMode = 'explore' | 'inspect' | 'mission_control' | 'hidden';
+export type PerformanceProfile = 'quality' | 'balanced' | 'performance';
 
 interface HabitatStoreState {
   equipment: EquipmentItem[];
@@ -21,6 +22,7 @@ interface HabitatStoreState {
   isPointerLocked: boolean;
   isFlashlightOn: boolean;
   hudMode: HudMode;
+  performanceProfile: PerformanceProfile;
   playerPosition: [number, number, number];
   playerYaw: number;
   playerPitch: number;
@@ -32,6 +34,7 @@ interface HabitatStoreState {
   navigationNotice: string | null;
 
   // Actions
+  setPerformanceProfile: (profile: PerformanceProfile) => void;
   selectEquipment: (id: string | null) => void;
   focusEquipment: (id: string) => void;
   resetCameraTarget: () => void;
@@ -183,6 +186,7 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
     isPointerLocked: false,
     isFlashlightOn: false,
     hudMode: 'explore',
+    performanceProfile: 'balanced',
     playerPosition: [0, 1.75, 14], // Spawn astronaut just south of main habitat entrance
     playerYaw: 0,
     playerPitch: 0,
@@ -192,6 +196,10 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
     targetedEquipmentId: null,
     teleportSignal: 0,
     navigationNotice: null,
+
+    setPerformanceProfile: (profile: PerformanceProfile) => {
+      set({ performanceProfile: profile });
+    },
 
     selectEquipment: (id: string | null) => {
       const currentHud = get().hudMode;

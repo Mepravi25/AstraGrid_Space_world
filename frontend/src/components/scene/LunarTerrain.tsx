@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { getLunarHeight } from '../../utils/terrainMath';
 import { getLunarRegolithTextures } from '../../utils/lunarTextures';
@@ -6,10 +6,10 @@ import { getLunarRegolithTextures } from '../../utils/lunarTextures';
 export const LunarTerrain: React.FC = () => {
   const regolithTextures = useMemo(() => getLunarRegolithTextures(), []);
 
-  // Generate procedurally elevated continuous lunar terrain geometry
+  // Generate procedurally elevated continuous lunar terrain geometry (optimized 120 segments)
   const terrainGeometry = useMemo(() => {
     const size = 600;
-    const segments = 180;
+    const segments = 120;
     const geo = new THREE.PlaneGeometry(size, size, segments, segments);
     geo.rotateX(-Math.PI / 2);
 
@@ -54,6 +54,28 @@ export const LunarTerrain: React.FC = () => {
     return list;
   }, []);
 
+  // Shared geometry, material, and instanced mesh ref for boulders (1 draw call vs 75)
+  const boulderGeo = useMemo(() => new THREE.DodecahedronGeometry(1, 1), []);
+  const boulderMat = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: '#4e515d', roughness: 0.92, metalness: 0.08 }),
+    []
+  );
+  const instancedBouldersRef = useRef<THREE.InstancedMesh>(null);
+
+  useEffect(() => {
+    if (instancedBouldersRef.current && boulders.length > 0) {
+      const dummy = new THREE.Object3D();
+      boulders.forEach((b, i) => {
+        dummy.position.set(b.position[0], b.position[1], b.position[2]);
+        dummy.scale.set(b.scale[0], b.scale[1], b.scale[2]);
+        dummy.rotation.set(b.rotation[0], b.rotation[1], b.rotation[2]);
+        dummy.updateMatrix();
+        instancedBouldersRef.current!.setMatrixAt(i, dummy.matrix);
+      });
+      instancedBouldersRef.current.instanceMatrix.needsUpdate = true;
+    }
+  }, [boulders]);
+
   // Pathway waymarkers / lights along main trails
   const trailMarkers = useMemo(() => {
     const markers: Array<[number, number, number]> = [];
@@ -83,6 +105,27 @@ export const LunarTerrain: React.FC = () => {
     }
     return markers;
   }, []);
+
+  // Shared geometry, material, and instanced mesh ref for trail beacons (1 draw call vs 24)
+  const markerGeo = useMemo(() => new THREE.CircleGeometry(0.35, 12), []);
+  const markerMat = useMemo(
+    () => new THREE.MeshBasicMaterial({ color: '#00e5ff', transparent: true, opacity: 0.6 }),
+    []
+  );
+  const instancedMarkersRef = useRef<THREE.InstancedMesh>(null);
+
+  useEffect(() => {
+    if (instancedMarkersRef.current && trailMarkers.length > 0) {
+      const dummy = new THREE.Object3D();
+      trailMarkers.forEach((pos, i) => {
+        dummy.position.set(pos[0], pos[1], pos[2]);
+        dummy.rotation.set(-Math.PI / 2, 0, 0);
+        dummy.updateMatrix();
+        instancedMarkersRef.current!.setMatrixAt(i, dummy.matrix);
+      });
+      instancedMarkersRef.current.instanceMatrix.needsUpdate = true;
+    }
+  }, [trailMarkers]);
 
   return (
     <group>
@@ -165,30 +208,19 @@ export const LunarTerrain: React.FC = () => {
         <meshBasicMaterial color="#ef4444" transparent opacity={0.5} />
       </mesh>
 
-      {/* 4. Surface Boulders */}
-      {boulders.map((b, idx) => (
-        <mesh
-          key={idx}
-          position={b.position}
-          scale={b.scale}
-          rotation={b.rotation}
-          castShadow
-          receiveShadow
-        >
-          <dodecahedronGeometry args={[1, 1]} />
-          <meshStandardMaterial color="#4e515d" roughness={0.92} metalness={0.08} />
-        </mesh>
-      ))}
+      {/* 4. Surface Boulders (Unified into a single high-performance instanced draw call) */}
+      <instancedMesh
+        ref={instancedBouldersRef}
+        args={[boulderGeo, boulderMat, boulders.length]}
+        castShadow
+        receiveShadow
+      />
 
-      {/* 5. Trail Ground Beacons along Surface Roads */}
-      {trailMarkers.map((pos, idx) => (
-        <group key={idx} position={pos}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[0.35, 12]} />
-            <meshBasicMaterial color="#00e5ff" transparent opacity={0.6} />
-          </mesh>
-        </group>
-      ))}
+      {/* 5. Trail Ground Beacons along Surface Roads (1 draw call instanced mesh) */}
+      <instancedMesh
+        ref={instancedMarkersRef}
+        args={[markerGeo, markerMat, trailMarkers.length]}
+      />
     </group>
   );
 };
