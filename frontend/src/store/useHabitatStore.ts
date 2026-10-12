@@ -4,6 +4,9 @@ import { HabitatTelemetry, HabitatSystemStatus } from '../types/simulation';
 import { INITIAL_EQUIPMENT_DATA } from '../data/initialEquipment';
 import { PREDEFINED_SCENARIOS } from '../data/scenarios';
 
+export type ExplorationMode = 'first_person' | 'free_cam';
+export type HudMode = 'explore' | 'inspect' | 'mission_control' | 'hidden';
+
 interface HabitatStoreState {
   equipment: EquipmentItem[];
   selectedEquipmentId: string | null;
@@ -12,14 +15,44 @@ interface HabitatStoreState {
   simSpeed: number; // 1, 2, 5
   currentScenarioId: string;
   telemetry: HabitatTelemetry;
-  
+
+  // Immersive exploration states
+  explorationMode: ExplorationMode;
+  isPointerLocked: boolean;
+  isFlashlightOn: boolean;
+  hudMode: HudMode;
+  playerPosition: [number, number, number];
+  playerHeadingDeg: number;
+  targetedEquipmentId: string | null;
+
   // Actions
   selectEquipment: (id: string | null) => void;
   focusEquipment: (id: string) => void;
   resetCameraTarget: () => void;
   setEquipmentStatus: (id: string, status: EquipmentStatus) => void;
   setEquipmentPower: (id: string, powerKW: number) => void;
-  
+
+  setExplorationMode: (mode: ExplorationMode) => void;
+  setPointerLocked: (locked: boolean) => void;
+  toggleFlashlight: () => void;
+  setHudMode: (mode: HudMode) => void;
+  toggleHud: () => void;
+  setPlayerTransform: (pos: [number, number, number], headingDeg: number) => void;
+  setTargetedEquipmentId: (id: string | null) => void;
+  interactWithTargeted: () => void;
+  returnToBase: () => void;
+
+  // Equipment subsystem actions
+  setSolarTrackingMode: (id: string, mode: 'auto' | 'stow' | 'manual') => void;
+  cleanSolarArrayPanels: (id: string) => void;
+  toggleBatteryReserveLock: (id: string) => void;
+  toggleWaterRecyclingVCD: (id: string) => void;
+  toggleSolidWastePyrolysis: (id: string) => void;
+  toggleNuclearReactorPower: (id: string) => void;
+  toggleAirlockSeal: (id: string) => void;
+  runWaterSterilization: (id: string) => void;
+
+  // Simulation loop controls
   startSimulation: () => void;
   pauseSimulation: () => void;
   resetSimulation: () => void;
@@ -60,7 +93,7 @@ const computeAggregateTelemetry = (
 
   const totalGen = solarGen + nuclearGen;
   const netPower = totalGen - demand;
-  
+
   let overallStatus: HabitatSystemStatus = 'nominal';
   if (hasCritical || batterySoc < 25) {
     overallStatus = 'critical';
@@ -129,22 +162,355 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
       initialWater
     ),
 
+    // Immersive controller default state
+    explorationMode: 'first_person',
+    isPointerLocked: false,
+    isFlashlightOn: false,
+    hudMode: 'explore',
+    playerPosition: [0, 1.75, 18], // Spawn astronaut just south of main habitat dome
+    playerHeadingDeg: 0,
+    targetedEquipmentId: null,
+
     selectEquipment: (id: string | null) => {
-      set({ selectedEquipmentId: id });
+      const currentHud = get().hudMode;
+      let nextHud = currentHud;
+      if (id) {
+        if (currentHud !== 'mission_control') {
+          nextHud = 'inspect';
+        }
+      } else {
+        if (currentHud === 'inspect') {
+          nextHud = 'explore';
+        }
+      }
+      set({
+        selectedEquipmentId: id,
+        hudMode: nextHud
+      });
     },
 
     focusEquipment: (id: string) => {
       const item = get().equipment.find((e) => e.id === id);
       if (item) {
+        const currentHud = get().hudMode;
         set({
           selectedEquipmentId: id,
-          cameraTarget: item.position
+          cameraTarget: item.position,
+          hudMode: currentHud === 'mission_control' ? 'mission_control' : 'inspect'
         });
       }
     },
 
     resetCameraTarget: () => {
       set({ cameraTarget: [0, 2, 0] });
+    },
+
+    setExplorationMode: (mode: ExplorationMode) => {
+      set({
+        explorationMode: mode,
+        isPointerLocked: false,
+        cameraTarget: mode === 'free_cam' ? [0, 2, 0] : null
+      });
+    },
+
+    setPointerLocked: (locked: boolean) => {
+      set({ isPointerLocked: locked });
+    },
+
+    toggleFlashlight: () => {
+      set((state) => ({ isFlashlightOn: !state.isFlashlightOn }));
+    },
+
+    setHudMode: (mode: HudMode) => {
+      set({ hudMode: mode });
+    },
+
+    toggleHud: () => {
+      set((state) => {
+        if (state.hudMode === 'hidden') return { hudMode: 'explore' };
+        if (state.hudMode === 'explore') return { hudMode: 'hidden' };
+        return { hudMode: 'explore' };
+      });
+    },
+
+    setPlayerTransform: (pos: [number, number, number], headingDeg: number) => {
+      set({ playerPosition: pos, playerHeadingDeg: headingDeg });
+    },
+
+    setTargetedEquipmentId: (id: string | null) => {
+      set({ targetedEquipmentId: id });
+    },
+
+    interactWithTargeted: () => {
+      const { targetedEquipmentId } = get();
+      if (targetedEquipmentId) {
+        set({
+          selectedEquipmentId: targetedEquipmentId,
+          hudMode: 'inspect',
+          isPointerLocked: false
+        });
+        if (document.pointerLockElement) {
+          document.exitPointerLock();
+        }
+      }
+    },
+
+    returnToBase: () => {
+      set({
+        playerPosition: [0, 1.75, 18],
+        playerHeadingDeg: 0,
+        cameraTarget: [0, 2, 0]
+      });
+    },
+
+    // Subsystem Specific Actions
+    setSolarTrackingMode: (id: string, mode: 'auto' | 'stow' | 'manual') => {
+      const { equipment, telemetry } = get();
+      const updated = equipment.map((item) => {
+        if (item.id === id) {
+          let powerKW = item.powerKW;
+          if (mode === 'stow') powerKW = 0;
+          else if (mode === 'auto') powerKW = item.status === 'nominal' ? 120.0 : 40.0;
+          else powerKW = 80.0;
+
+          const metrics = { ...item.metrics };
+          if (metrics.trackingAngle) {
+            metrics.trackingAngle = {
+              ...metrics.trackingAngle,
+              value: mode === 'stow' ? 0.0 : mode === 'auto' ? 14.8 : 45.0
+            };
+          }
+
+          return {
+            ...item,
+            powerKW,
+            customState: {
+              ...item.customState,
+              trackingMode: mode,
+              lastActionMessage: `Solar array tracking switched to ${mode.toUpperCase()} mode`
+            },
+            metrics
+          };
+        }
+        return item;
+      });
+
+      set({
+        equipment: updated,
+        telemetry: computeAggregateTelemetry(
+          updated,
+          telemetry.missionElapsedSol,
+          telemetry.missionElapsedSol * 24 * 3600,
+          telemetry.batterySocPct,
+          telemetry.potableWaterLiters
+        )
+      });
+    },
+
+    cleanSolarArrayPanels: (id: string) => {
+      const { equipment, telemetry } = get();
+      const updated = equipment.map((item) => {
+        if (item.id === id) {
+          const metrics = { ...item.metrics };
+          if (metrics.dustAccumulation) {
+            metrics.dustAccumulation = { ...metrics.dustAccumulation, value: 0.1 };
+          }
+          const cycles = (item.customState?.dustCleanCycles || 0) + 1;
+          const powerKW = Math.min(item.maxPowerKW, item.powerKW + 10.0);
+
+          return {
+            ...item,
+            powerKW,
+            efficiencyPct: 34.2,
+            customState: {
+              ...item.customState,
+              dustCleanCycles: cycles,
+              lastActionMessage: `Electrostatic dust removal cycle #${cycles} completed. Dust occlusion cleared to 0.1%.`
+            },
+            metrics
+          };
+        }
+        return item;
+      });
+
+      set({
+        equipment: updated,
+        telemetry: computeAggregateTelemetry(
+          updated,
+          telemetry.missionElapsedSol,
+          telemetry.missionElapsedSol * 24 * 3600,
+          telemetry.batterySocPct,
+          telemetry.potableWaterLiters
+        )
+      });
+    },
+
+    toggleBatteryReserveLock: (id: string) => {
+      const { equipment } = get();
+      const updated = equipment.map((item) => {
+        if (item.id === id) {
+          const currentLock = item.customState?.reserveLocked ?? false;
+          return {
+            ...item,
+            customState: {
+              ...item.customState,
+              reserveLocked: !currentLock,
+              lastActionMessage: !currentLock
+                ? 'EMERGENCY RESERVE LOCK ACTIVE: Discharge limited to life-critical loads only.'
+                : 'Standard charge/discharge cycling restored.'
+            }
+          };
+        }
+        return item;
+      });
+      set({ equipment: updated });
+    },
+
+    toggleWaterRecyclingVCD: (id: string) => {
+      const { equipment, telemetry } = get();
+      const updated = equipment.map((item) => {
+        if (item.id === id) {
+          const currentActive = item.customState?.vcdActive ?? true;
+          const newActive = !currentActive;
+          const newStatus: EquipmentStatus = newActive ? 'nominal' : 'offline';
+          const powerKW = newActive ? -7.5 : 0.0;
+          return {
+            ...item,
+            status: newStatus,
+            powerKW,
+            customState: {
+              ...item.customState,
+              vcdActive: newActive,
+              lastActionMessage: newActive
+                ? 'VCD centrifuge cycle started. Wastewater recovery operational.'
+                : 'VCD distillation paused. Standby mode.'
+            }
+          };
+        }
+        return item;
+      });
+
+      set({
+        equipment: updated,
+        telemetry: computeAggregateTelemetry(
+          updated,
+          telemetry.missionElapsedSol,
+          telemetry.missionElapsedSol * 24 * 3600,
+          telemetry.batterySocPct,
+          telemetry.potableWaterLiters
+        )
+      });
+    },
+
+    toggleSolidWastePyrolysis: (id: string) => {
+      const { equipment, telemetry } = get();
+      const updated = equipment.map((item) => {
+        if (item.id === id) {
+          const currentActive = item.customState?.pyroActive ?? true;
+          const newActive = !currentActive;
+          const newStatus: EquipmentStatus = newActive ? 'nominal' : 'offline';
+          const powerKW = newActive ? -11.8 : 0.0;
+          return {
+            ...item,
+            status: newStatus,
+            powerKW,
+            customState: {
+              ...item.customState,
+              pyroActive: newActive,
+              lastActionMessage: newActive
+                ? 'Pyrolysis core furnace heating to 380°C. Feedstock recovery online.'
+                : 'Pyrolysis cycle stopped. Chamber cooling.'
+            }
+          };
+        }
+        return item;
+      });
+
+      set({
+        equipment: updated,
+        telemetry: computeAggregateTelemetry(
+          updated,
+          telemetry.missionElapsedSol,
+          telemetry.missionElapsedSol * 24 * 3600,
+          telemetry.batterySocPct,
+          telemetry.potableWaterLiters
+        )
+      });
+    },
+
+    toggleNuclearReactorPower: (id: string) => {
+      const { equipment, telemetry } = get();
+      const updated = equipment.map((item) => {
+        if (item.id === id) {
+          const currentOnline = item.customState?.nuclearOnline ?? true;
+          const newOnline = !currentOnline;
+          const newStatus: EquipmentStatus = newOnline ? 'nominal' : 'offline';
+          const powerKW = newOnline ? 40.0 : 0.0;
+          return {
+            ...item,
+            status: newStatus,
+            powerKW,
+            customState: {
+              ...item.customState,
+              nuclearOnline: newOnline,
+              lastActionMessage: newOnline
+                ? 'Kilopower reactor Stirling loop synchronized. 40 kWe baseload online.'
+                : 'Kilopower reactor shutdown. Backup generation offline.'
+            }
+          };
+        }
+        return item;
+      });
+
+      set({
+        equipment: updated,
+        telemetry: computeAggregateTelemetry(
+          updated,
+          telemetry.missionElapsedSol,
+          telemetry.missionElapsedSol * 24 * 3600,
+          telemetry.batterySocPct,
+          telemetry.potableWaterLiters
+        )
+      });
+    },
+
+    toggleAirlockSeal: (id: string) => {
+      const { equipment } = get();
+      const updated = equipment.map((item) => {
+        if (item.id === id) {
+          const currentSealed = item.customState?.airlockSealed ?? true;
+          return {
+            ...item,
+            customState: {
+              ...item.customState,
+              airlockSealed: !currentSealed,
+              lastActionMessage: !currentSealed
+                ? 'Primary outer airlock hatch depressurized and cycled.'
+                : 'Airlock inner hatch sealed. Cabin pressure secured at 101.3 kPa.'
+            }
+          };
+        }
+        return item;
+      });
+      set({ equipment: updated });
+    },
+
+    runWaterSterilization: (id: string) => {
+      const { equipment } = get();
+      const updated = equipment.map((item) => {
+        if (item.id === id) {
+          return {
+            ...item,
+            customState: {
+              ...item.customState,
+              sterilizationActive: true,
+              lastActionMessage: 'UV sterilization pulsed cycle completed. Purity 99.99% certified.'
+            }
+          };
+        }
+        return item;
+      });
+      set({ equipment: updated });
     },
 
     setEquipmentStatus: (id: string, status: EquipmentStatus) => {
@@ -243,9 +609,8 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
       const newTotalSeconds = newSol * 24 * 3600;
 
       // Net energy balance dynamically affects battery SoC
-      // netPowerKW (kW) * (hours) = kWh change
       const deltaHours = simDeltaSeconds / 3600;
-      const energyDeltaKWh = telemetry.netPowerKW * deltaHours * 0.95; // 95% round-trip efficiency
+      const energyDeltaKWh = telemetry.netPowerKW * deltaHours * 0.95;
       const newStoredKWh = Math.max(
         0,
         Math.min(telemetry.batteryCapacityKWh, telemetry.batteryStoredKWh + energyDeltaKWh)

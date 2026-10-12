@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { useHabitatStore } from '../../../store/useHabitatStore';
 import { EquipmentStatusIndicator } from '../EquipmentStatusIndicator';
 
+import { getLunarHeight } from '../../../utils/terrainMath';
+
 interface NuclearPowerUnitProps {
   id: string;
 }
@@ -17,12 +19,13 @@ export const NuclearPowerUnit: React.FC<NuclearPowerUnitProps> = ({ id }) => {
 
   const isSelected = selectedEquipmentId === id;
   const status = equipment?.status || 'nominal';
-  const position = equipment?.position || [-38, 0, 24];
+  const rawPos = equipment?.position || [-110, 0, 75];
+  const groundY = getLunarHeight(rawPos[0], rawPos[2]);
 
   return (
     <group
       ref={groupRef}
-      position={position}
+      position={[rawPos[0], groundY, rawPos[2]]}
       onClick={(e) => {
         e.stopPropagation();
         selectEquipment(id);

@@ -46,8 +46,8 @@ export const CameraController: React.FC = () => {
       makeDefault
       enableDamping
       dampingFactor={0.06}
-      minDistance={6}
-      maxDistance={120}
+      minDistance={4}
+      maxDistance={280}
       maxPolarAngle={Math.PI / 2.05} // Prevent camera going below lunar terrain
       target={[0, 1.5, 0]}
     />

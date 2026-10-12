@@ -9,12 +9,14 @@ import {
   ShieldAlert,
   ShieldX,
   Radio,
-  Clock
+  Clock,
+  X
 } from 'lucide-react';
 import { useHabitatStore } from '../../store/useHabitatStore';
 
 export const TelemetryHeader: React.FC = () => {
   const telemetry = useHabitatStore((state) => state.telemetry);
+  const setHudMode = useHabitatStore((state) => state.setHudMode);
 
   const getStatusBadge = () => {
     switch (telemetry.overallStatus) {
@@ -164,6 +166,15 @@ export const TelemetryHeader: React.FC = () => {
 
           {/* Status Badge */}
           {getStatusBadge()}
+
+          {/* Close Mission Control Dashboard */}
+          <button
+            onClick={() => setHudMode('explore')}
+            className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer border border-slate-700/60 ml-1"
+            title="Return to Moon Exploration View (Esc/Tab)"
+          >
+            <X className="w-4 h-4 text-cyan-300" />
+          </button>
         </div>
       </div>
     </header>

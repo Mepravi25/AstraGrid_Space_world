@@ -1,137 +1,220 @@
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
-
-interface CraterProps {
-  position: [number, number, number];
-  radius: number;
-  depth: number;
-}
-
-const Crater: React.FC<CraterProps> = ({ position, radius, depth }) => {
-  return (
-    <group position={position}>
-      {/* Crater rim */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
-        <torusGeometry args={[radius, radius * 0.18, 12, 32]} />
-        <meshStandardMaterial
-          color="#42454e"
-          roughness={0.92}
-          metalness={0.08}
-        />
-      </mesh>
-      {/* Depressed crater floor */}
-      <mesh position={[0, -depth * 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[radius * 0.9, 24]} />
-        <meshStandardMaterial
-          color="#202228"
-          roughness={0.98}
-          metalness={0.05}
-        />
-      </mesh>
-    </group>
-  );
-};
+import { getLunarHeight, LUNAR_CRATERS } from '../../utils/terrainMath';
 
 export const LunarTerrain: React.FC = () => {
-  // Pre-generate static craters
-  const craters = useMemo(() => [
-    { position: [-30, 0, -35] as [number, number, number], radius: 9.0, depth: 1.8 },
-    { position: [36, 0, -28] as [number, number, number], radius: 11.5, depth: 2.2 },
-    { position: [40, 0, 32] as [number, number, number], radius: 7.2, depth: 1.5 },
-    { position: [-42, 0, 38] as [number, number, number], radius: 12.0, depth: 2.5 },
-    { position: [5, 0, -42] as [number, number, number], radius: 5.5, depth: 1.2 },
-    { position: [-20, 0, 35] as [number, number, number], radius: 4.8, depth: 1.0 },
-    { position: [28, 0, -5] as [number, number, number], radius: 3.5, depth: 0.8 },
-    { position: [-15, 0, -28] as [number, number, number], radius: 4.2, depth: 0.9 },
-  ], []);
+  // Generate procedurally elevated lunar terrain geometry
+  const terrainGeometry = useMemo(() => {
+    const size = 600;
+    const segments = 160;
+    const geo = new THREE.PlaneGeometry(size, size, segments, segments);
+    geo.rotateX(-Math.PI / 2);
 
-  // Pre-generate scattered lunar rocks / boulders
-  const rocks = useMemo(() => {
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const y = getLunarHeight(x, z);
+      pos.setY(i, y);
+    }
+
+    geo.computeVertexNormals();
+    return geo;
+  }, []);
+
+  // Scattered lunar rocks and boulders positioned directly on terrain surface
+  const boulders = useMemo(() => {
     const list: Array<{
       position: [number, number, number];
       scale: [number, number, number];
       rotation: [number, number, number];
     }> = [];
-    const seed = 42;
-    for (let i = 0; i < 45; i++) {
-      const angle = (i / 45) * Math.PI * 2 + (Math.sin(i * seed) * 0.5);
-      const dist = 12 + ((i * 17) % 55);
+    const count = 75;
+
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + Math.sin(i * 3.7) * 0.4;
+      const dist = 18 + ((i * 29) % 180);
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
-      // Don't place on exact center pad
-      if (Math.hypot(x, z) > 6) {
-        const s = 0.35 + ((i % 5) * 0.25);
+
+      // Don't place rocks on immediate habitat walkways
+      if (Math.hypot(x, z) > 12) {
+        const y = getLunarHeight(x, z);
+        const s = 0.45 + ((i % 7) * 0.35);
         list.push({
-          position: [x, s * 0.4, z],
-          scale: [s, s * 0.7, s * 1.1],
-          rotation: [i * 0.5, i * 0.8, i * 0.3],
+          position: [x, y + s * 0.4, z],
+          scale: [s, s * 0.75, s * 1.1],
+          rotation: [i * 0.6, i * 0.9, i * 0.4]
         });
       }
     }
     return list;
   }, []);
 
+  // Pathway waymarkers / lights along main trails
+  const trailMarkers = useMemo(() => {
+    const markers: Array<[number, number, number]> = [];
+    // Trail: Habitat to Solar Array Alpha [-65, -55]
+    for (let t = 0.15; t <= 0.85; t += 0.12) {
+      const x = -65 * t;
+      const z = -55 * t;
+      markers.push([x, getLunarHeight(x, z) + 0.05, z]);
+    }
+    // Trail: Habitat to Landing Pad [85, -75]
+    for (let t = 0.15; t <= 0.85; t += 0.12) {
+      const x = 85 * t;
+      const z = -75 * t;
+      markers.push([x, getLunarHeight(x, z) + 0.05, z]);
+    }
+    // Trail: Habitat to Kilopower Berm [-110, 75]
+    for (let t = 0.15; t <= 0.85; t += 0.12) {
+      const x = -110 * t;
+      const z = 75 * t;
+      markers.push([x, getLunarHeight(x, z) + 0.05, z]);
+    }
+    // Trail: Habitat to Rover Station [70, 50]
+    for (let t = 0.15; t <= 0.85; t += 0.12) {
+      const x = 70 * t;
+      const z = 50 * t;
+      markers.push([x, getLunarHeight(x, z) + 0.05, z]);
+    }
+    return markers;
+  }, []);
+
   return (
     <group>
-      {/* Primary Lunar Ground Surface */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
-        <planeGeometry args={[260, 260, 64, 64]} />
+      {/* 1. Large Procedurally Displaced Lunar Regolith Surface */}
+      <mesh geometry={terrainGeometry} receiveShadow>
         <meshStandardMaterial
-          color="#2b2d35"
-          roughness={0.95}
+          color="#292c35"
+          roughness={0.94}
           metalness={0.06}
+          flatShading={false}
         />
       </mesh>
 
-      {/* Leveled Habitat Foundation Pad */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <circleGeometry args={[11, 48]} />
-        <meshStandardMaterial
-          color="#333742"
-          roughness={0.88}
-          metalness={0.15}
-        />
+      {/* 2. Leveled Habitat Central Foundation Pad */}
+      <group position={[0, 0.03, 0]}>
+        <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[14, 64]} />
+          <meshStandardMaterial color="#333742" roughness={0.85} metalness={0.2} />
+        </mesh>
+
+        {/* Outer glowing perimeter safety ring */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <ringGeometry args={[13.7, 14.2, 64]} />
+          <meshBasicMaterial color="#00e5ff" transparent opacity={0.35} />
+        </mesh>
+      </group>
+
+      {/* 3. Foundation Pads for Outlying Installations */}
+      {/* Solar Farm Regolith Pad */}
+      <mesh
+        receiveShadow
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[-65, getLunarHeight(-65, -55) + 0.04, -55]}
+      >
+        <circleGeometry args={[18, 36]} />
+        <meshStandardMaterial color="#2d3039" roughness={0.9} metalness={0.15} />
       </mesh>
 
-      {/* Outer foundation perimeter marker ring */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
-        <ringGeometry args={[10.8, 11.2, 48]} />
-        <meshBasicMaterial color="#00e5ff" transparent opacity={0.25} />
+      {/* Landing Pad Blast Shield Area */}
+      <group position={[85, getLunarHeight(85, -75) + 0.05, -75]}>
+        <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[16, 48]} />
+          <meshStandardMaterial color="#22252d" roughness={0.88} metalness={0.25} />
+        </mesh>
+        {/* Landing Target Ring */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <ringGeometry args={[11.5, 12.2, 48]} />
+          <meshBasicMaterial color="#f59e0b" transparent opacity={0.65} />
+        </mesh>
+        {/* Landing Center Cross */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+          <planeGeometry args={[18, 0.8]} />
+          <meshBasicMaterial color="#f59e0b" transparent opacity={0.7} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+          <planeGeometry args={[0.8, 18]} />
+          <meshBasicMaterial color="#f59e0b" transparent opacity={0.7} />
+        </mesh>
+      </group>
+
+      {/* Rover Depot Service Pad */}
+      <mesh
+        receiveShadow
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[70, getLunarHeight(70, 50) + 0.04, 50]}
+      >
+        <circleGeometry args={[10, 32]} />
+        <meshStandardMaterial color="#2c2f38" roughness={0.9} metalness={0.15} />
       </mesh>
 
-      {/* Procedural Craters */}
-      {craters.map((c, idx) => (
-        <Crater key={idx} position={c.position} radius={c.radius} depth={c.depth} />
-      ))}
+      {/* Nuclear Berm Shield Barrier Perimeter Ring */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[-110, getLunarHeight(-110, 75) + 0.08, 75]}
+      >
+        <ringGeometry args={[13.5, 14.5, 36]} />
+        <meshBasicMaterial color="#ef4444" transparent opacity={0.5} />
+      </mesh>
 
-      {/* Lunar Boulders */}
-      {rocks.map((rock, idx) => (
+      {/* 4. Visual Crater Rim Toruses for Identified Craters */}
+      {LUNAR_CRATERS.map((c, idx) => {
+        const rimY = getLunarHeight(c.cx, c.cz);
+        return (
+          <group key={idx} position={[c.cx, rimY, c.cz]}>
+            {/* Crater rim torus */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, c.rimHeight * 0.4, 0]}>
+              <torusGeometry args={[c.radius * 0.96, c.radius * 0.16, 12, 36]} />
+              <meshStandardMaterial color="#383b45" roughness={0.96} metalness={0.06} />
+            </mesh>
+          </group>
+        );
+      })}
+
+      {/* 5. Surface Boulders */}
+      {boulders.map((b, idx) => (
         <mesh
           key={idx}
-          position={rock.position}
-          scale={rock.scale}
-          rotation={rock.rotation}
+          position={b.position}
+          scale={b.scale}
+          rotation={b.rotation}
           castShadow
           receiveShadow
         >
           <dodecahedronGeometry args={[1, 1]} />
-          <meshStandardMaterial
-            color="#3a3d47"
-            roughness={0.95}
-            metalness={0.08}
-          />
+          <meshStandardMaterial color="#3d404c" roughness={0.96} metalness={0.08} />
         </mesh>
       ))}
 
-      {/* Distant rim mountains for horizon depth */}
+      {/* 6. Trail Ground Beacons along Surface Roads */}
+      {trailMarkers.map((pos, idx) => (
+        <group key={idx} position={pos}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[0.35, 12]} />
+            <meshBasicMaterial color="#00e5ff" transparent opacity={0.6} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* 7. Distant Mountain Horizons encasing the crater basin */}
       <group position={[0, 0, 0]}>
-        <mesh position={[0, 15, -125]} rotation={[0, 0, 0]}>
-          <coneGeometry args={[120, 32, 16]} />
-          <meshStandardMaterial color="#1a1c22" roughness={0.99} />
+        <mesh position={[0, 32, -260]}>
+          <coneGeometry args={[220, 65, 24]} />
+          <meshStandardMaterial color="#181a20" roughness={0.99} />
         </mesh>
-        <mesh position={[-125, 12, 10]} rotation={[0, 0, 0]}>
-          <coneGeometry args={[100, 25, 16]} />
-          <meshStandardMaterial color="#191b20" roughness={0.99} />
+        <mesh position={[-250, 28, 40]}>
+          <coneGeometry args={[190, 58, 20]} />
+          <meshStandardMaterial color="#16181e" roughness={0.99} />
+        </mesh>
+        <mesh position={[230, 30, 80]}>
+          <coneGeometry args={[200, 62, 22]} />
+          <meshStandardMaterial color="#17191f" roughness={0.99} />
+        </mesh>
+        <mesh position={[60, 35, 250]}>
+          <coneGeometry args={[210, 68, 24]} />
+          <meshStandardMaterial color="#15171d" roughness={0.99} />
         </mesh>
       </group>
     </group>

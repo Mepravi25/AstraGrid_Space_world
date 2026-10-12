@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { useHabitatStore } from '../../../store/useHabitatStore';
 import { EquipmentStatusIndicator } from '../EquipmentStatusIndicator';
 
+import { getLunarHeight } from '../../../utils/terrainMath';
+
 interface SolidWasteUnitProps {
   id: string;
 }
@@ -17,12 +19,13 @@ export const SolidWasteUnit: React.FC<SolidWasteUnitProps> = ({ id }) => {
 
   const isSelected = selectedEquipmentId === id;
   const status = equipment?.status || 'nominal';
-  const position = equipment?.position || [24, 0, 14];
+  const rawPos = equipment?.position || [50, 0, 32];
+  const groundY = getLunarHeight(rawPos[0], rawPos[2]);
 
   return (
     <group
       ref={groupRef}
-      position={position}
+      position={[rawPos[0], groundY, rawPos[2]]}
       onClick={(e) => {
         e.stopPropagation();
         selectEquipment(id);

@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { useHabitatStore } from '../../../store/useHabitatStore';
 import { EquipmentStatusIndicator } from '../EquipmentStatusIndicator';
 
+import { getLunarHeight } from '../../../utils/terrainMath';
+
 interface BatteryBankProps {
   id: string;
 }
@@ -18,7 +20,8 @@ export const BatteryBank: React.FC<BatteryBankProps> = ({ id }) => {
 
   const isSelected = selectedEquipmentId === id;
   const status = equipment?.status || 'nominal';
-  const position = equipment?.position || [-14, 0, 10];
+  const rawPos = equipment?.position || [-32, 0, 22];
+  const groundY = getLunarHeight(rawPos[0], rawPos[2]);
   const soc = telemetry.batterySocPct;
 
   // LED bar color based on SoC
@@ -27,7 +30,7 @@ export const BatteryBank: React.FC<BatteryBankProps> = ({ id }) => {
   return (
     <group
       ref={groupRef}
-      position={position}
+      position={[rawPos[0], groundY, rawPos[2]]}
       onClick={(e) => {
         e.stopPropagation();
         selectEquipment(id);

@@ -9,7 +9,7 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     category: 'energy_generation',
     status: 'nominal',
     criticality: 'mission_critical',
-    position: [-22, 0, -18],
+    position: [-65, 0, -55],
     rotation: [0, 0.4, 0],
     description: 'High-efficiency multi-junction GaAs solar array with dual-axis elevation tracking mounted on lunar regolith stanchions.',
     functionSummary: 'Primary daytime electrical energy generator. Tracks the low-angle lunar sun to maximize photon capture.',
@@ -18,6 +18,11 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     temperatureK: 365,
     efficiencyPct: 32.4,
     healthPct: 98.5,
+    customState: {
+      trackingMode: 'auto',
+      dustCleanCycles: 14,
+      lastActionMessage: 'Active solar tracking aligned with low-angle polar sun'
+    },
     metrics: {
       irradiance: { label: 'Solar Flux', value: 1361, unit: 'W/m²', min: 0, max: 1400, status: 'nominal' },
       trackingAngle: { label: 'Elevation Angle', value: 14.8, unit: 'deg', min: 0, max: 90, status: 'nominal' },
@@ -43,6 +48,10 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     temperatureK: 295.15, // 22 deg C
     efficiencyPct: 99.1,
     healthPct: 100.0,
+    customState: {
+      airlockSealed: true,
+      lastActionMessage: 'Pressurized environment secure. Atmosphere composition 78% N2, 21% O2.'
+    },
     metrics: {
       cabinPressure: { label: 'Cabin Pressure', value: 101.3, unit: 'kPa', min: 95, max: 103, status: 'nominal' },
       cabinTempC: { label: 'Internal Temp', value: 21.8, unit: '°C', min: 18, max: 24, status: 'nominal' },
@@ -59,7 +68,7 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     category: 'energy_storage',
     status: 'nominal',
     criticality: 'life_critical',
-    position: [-14, 0, 10],
+    position: [-32, 0, 22],
     rotation: [0, -0.2, 0],
     description: 'Vacuum-insulated cryogenic lithium iron phosphate & regenerative fuel cell energy storage rack container.',
     functionSummary: 'Buffers diurnal energy variations, absorbs peak solar surplus, and powers habitat during lunar night and eclipses.',
@@ -68,6 +77,10 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     temperatureK: 293,
     efficiencyPct: 94.2,
     healthPct: 97.8,
+    customState: {
+      reserveLocked: false,
+      lastActionMessage: 'Normal charge/discharge cycling enabled'
+    },
     metrics: {
       stateOfCharge: { label: 'State of Charge (SoC)', value: 88.5, unit: '%', min: 20, max: 100, status: 'nominal' },
       storedCapacity: { label: 'Available Energy', value: 442.5, unit: 'kWh', min: 100, max: 500, status: 'nominal' },
@@ -84,7 +97,7 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     category: 'resource_recovery',
     status: 'nominal',
     criticality: 'life_critical',
-    position: [12, 0, -12],
+    position: [28, 0, -24],
     rotation: [0, 0.6, 0],
     description: 'High-pressure vacuum-jacketed spherical fluid storage sphere with thermal heating elements and UV sterilization loops.',
     functionSummary: 'Stores potable drinking water, hydration fluid for crew, and reserve coolant for critical ECLSS radiators.',
@@ -93,6 +106,10 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     temperatureK: 281, // ~8 deg C
     efficiencyPct: 99.8,
     healthPct: 99.0,
+    customState: {
+      sterilizationActive: true,
+      lastActionMessage: 'Active UV recirculation loop operating nominal'
+    },
     metrics: {
       waterVolume: { label: 'Total Potable Stock', value: 2680, unit: 'Liters', min: 500, max: 3000, status: 'nominal' },
       capacityPct: { label: 'Fill Ratio', value: 89.3, unit: '%', min: 20, max: 100, status: 'nominal' },
@@ -109,7 +126,7 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     category: 'life_support',
     status: 'nominal',
     criticality: 'mission_critical',
-    position: [16, 0, 4],
+    position: [38, 0, 10],
     rotation: [0, -0.3, 0],
     description: 'Vapor Compression Distillation (VCD) and catalytic post-treatment unit converting urine, wash water, and humidity into sterile water.',
     functionSummary: 'Closed-loop fluid reclamation system achieving >98% water loop closure on lunar surface.',
@@ -118,6 +135,10 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     temperatureK: 338,
     efficiencyPct: 98.4,
     healthPct: 96.2,
+    customState: {
+      vcdActive: true,
+      lastActionMessage: 'Centrifuge vacuum distillation loop processing active wastewater'
+    },
     metrics: {
       recoveryRate: { label: 'Distillate Recovery Rate', value: 98.4, unit: '%', min: 90, max: 100, status: 'nominal' },
       processingThroughput: { label: 'Throughput', value: 3.2, unit: 'L/hr', min: 0, max: 5, status: 'nominal' },
@@ -134,7 +155,7 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     category: 'life_support',
     status: 'nominal',
     criticality: 'life_critical',
-    position: [6, 0, 16],
+    position: [18, 0, 32],
     rotation: [0, -0.5, 0],
     description: 'Solid Polymer Electrolyte (SPE) water electrolysis system coupled with Sabatier carbon dioxide reduction and cryocooler loop.',
     functionSummary: 'Generates breathing oxygen for the habitat cabin and astronaut extravehicular activity (EVA) suits.',
@@ -143,6 +164,9 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     temperatureK: 320,
     efficiencyPct: 95.8,
     healthPct: 98.1,
+    customState: {
+      lastActionMessage: 'Electrolyzer cell stack generating 4.8 kg/day O2'
+    },
     metrics: {
       o2GenRate: { label: 'O2 Generation Rate', value: 4.8, unit: 'kg/day', min: 3, max: 6, status: 'nominal' },
       o2Purity: { label: 'Oxygen Gas Purity', value: 99.98, unit: '%', min: 99.5, max: 100, status: 'nominal' },
@@ -159,7 +183,7 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     category: 'resource_recovery',
     status: 'nominal',
     criticality: 'deferrable',
-    position: [24, 0, 14],
+    position: [50, 0, 32],
     rotation: [0, 0.8, 0],
     description: 'High-temperature vacuum pyrolysis autoclave and compactor turning habitat packaging, plastic polymers, and biological waste into inert gases and 3D print feedstock.',
     functionSummary: 'Reduces habitat waste mass, sterilizes biologically active waste, and produces reusable manufacturing feedstock.',
@@ -168,6 +192,10 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     temperatureK: 650,
     efficiencyPct: 91.2,
     healthPct: 94.0,
+    customState: {
+      pyroActive: true,
+      lastActionMessage: 'Vacuum retort furnace operating batch cycle at 380°C'
+    },
     metrics: {
       chamberTemp: { label: 'Pyrolysis Core Temp', value: 380, unit: '°C', min: 300, max: 550, status: 'nominal' },
       batchProgress: { label: 'Autoclave Batch Cycle', value: 64, unit: '%', min: 0, max: 100, status: 'nominal' },
@@ -184,7 +212,7 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     category: 'energy_generation',
     status: 'nominal',
     criticality: 'mission_critical',
-    position: [-38, 0, 24],
+    position: [-110, 0, 75],
     rotation: [0, 0, 0],
     description: 'NASA Kilopower-style compact 40 kWe uranium-235 solid block reactor with sodium heat pipes and Stirling engine heat-rejection umbrella.',
     functionSummary: 'Reliable, continuous baseload power supply positioned in an isolated berm outside crew radiation perimeter.',
@@ -193,6 +221,10 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     temperatureK: 923, // 650 deg C core
     efficiencyPct: 35.0,
     healthPct: 99.9,
+    customState: {
+      nuclearOnline: true,
+      lastActionMessage: 'Kilopower core nominal at 40 kWe continuous baseload'
+    },
     metrics: {
       coreTempC: { label: 'Core Temp', value: 652, unit: '°C', min: 580, max: 750, status: 'nominal' },
       stirlingEngines: { label: 'Stirling Converters', value: '8 / 8 Online', unit: '', status: 'nominal' },
@@ -209,7 +241,7 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     category: 'infrastructure',
     status: 'nominal',
     criticality: 'life_critical',
-    position: [-8, 0, -6],
+    position: [-20, 0, -18],
     rotation: [0, -0.4, 0],
     description: 'Central solid-state power conditioning and distribution unit with bidirectional DC-DC converters, dynamic bus switching, and autonomous fault breakers.',
     functionSummary: 'Directs power flow between solar array, nuclear reactor, battery bank, and habitat loads with nanosecond fault isolation.',
@@ -218,12 +250,71 @@ export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
     temperatureK: 288,
     efficiencyPct: 98.9,
     healthPct: 99.4,
+    customState: {
+      lastActionMessage: 'Bidirectional microgrid synchronizer locked at 380V DC'
+    },
     metrics: {
       mainBusVoltage: { label: 'Primary HVDC Bus', value: 380.0, unit: 'V DC', min: 370, max: 390, status: 'nominal' },
       totalGridThroughput: { label: 'Grid Power Throughput', value: 160.0, unit: 'kW', status: 'nominal' },
       powerFactor: { label: 'Inverter Efficiency', value: 98.9, unit: '%', status: 'nominal' },
       activeFeeders: { label: 'Active Feeder Conduits', value: '9 / 9 Online', unit: '', status: 'nominal' },
       switchgearTripCount: { label: 'Breaker Trips (24h)', value: 0, unit: 'events', status: 'nominal' }
+    }
+  },
+  {
+    id: 'lunar-lander-alpha',
+    code: 'LANDER-DESCENT-01',
+    name: 'Autonomous Cargo & Crew Lander',
+    type: 'lunar_lander',
+    category: 'infrastructure',
+    status: 'nominal',
+    criticality: 'mission_critical',
+    position: [85, 0, -75],
+    rotation: [0, 0.25, 0],
+    description: 'Reusable lunar descent stage parked on designated blast-deflection landing pad with propellant transfer lines and cargo crane.',
+    functionSummary: 'Primary transit vehicle for surface payload delivery, return sample storage, and emergency evacuation.',
+    powerKW: -0.8,
+    maxPowerKW: 2.5,
+    temperatureK: 275,
+    efficiencyPct: 99.5,
+    healthPct: 99.2,
+    customState: {
+      lastActionMessage: 'Descent stage secured on landing pad. Avionics in surface standby.'
+    },
+    metrics: {
+      padStatus: { label: 'Landing Pad Berth', value: 'Berth 1 (Active)', unit: '', status: 'nominal' },
+      propellantMethane: { label: 'Cryo Methane Remaining', value: 1420, unit: 'kg', status: 'nominal' },
+      propellantLOX: { label: 'Cryo LOX Remaining', value: 4260, unit: 'kg', status: 'nominal' },
+      avionicsLink: { label: 'Telemetry Telecommand', value: 'Active RF Uplink', unit: '', status: 'nominal' },
+      payloadHold: { label: 'Cargo Payload Unloaded', value: 100, unit: '%', status: 'nominal' }
+    }
+  },
+  {
+    id: 'lunar-rover-unit',
+    code: 'ROVER-EXPLORER-01',
+    name: 'Pressurized Lunar Exploration Rover',
+    type: 'lunar_rover',
+    category: 'infrastructure',
+    status: 'nominal',
+    criticality: 'mission_critical',
+    position: [70, 0, 50],
+    rotation: [0, -0.6, 0],
+    description: 'Long-range electric lunar terrain vehicle with active suspension, robotic sampling arm, and high-gain navigation mast.',
+    functionSummary: 'Surface geology traverse vehicle capable of 40 km exploratory sorties into lunar craters and permanently shadowed regions.',
+    powerKW: -2.0,
+    maxPowerKW: 8.0,
+    temperatureK: 286,
+    efficiencyPct: 96.0,
+    healthPct: 98.7,
+    customState: {
+      lastActionMessage: 'Parked at charging gantry. Battery charged to 94%.'
+    },
+    metrics: {
+      batterySoC: { label: 'Rover Traction Battery', value: 94.2, unit: '%', min: 20, max: 100, status: 'nominal' },
+      odometerKM: { label: 'Cumulative Traverse', value: 128.4, unit: 'km', status: 'nominal' },
+      tirePressure: { label: 'Wire-Mesh Wheel State', value: 'Nominal Compliant', unit: '', status: 'nominal' },
+      scienceArm: { label: 'Drill & Spectrometer Arm', value: 'Stowed (Ready)', unit: '', status: 'nominal' },
+      navUplink: { label: 'Base Lidar & Comm Range', value: '64.8 m from HAB', unit: '', status: 'nominal' }
     }
   }
 ];

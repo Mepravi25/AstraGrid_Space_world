@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { useHabitatStore } from '../../../store/useHabitatStore';
 import { EquipmentStatusIndicator } from '../EquipmentStatusIndicator';
 
+import { getLunarHeight } from '../../../utils/terrainMath';
+
 interface WaterStorageProps {
   id: string;
 }
@@ -18,7 +20,8 @@ export const WaterStorage: React.FC<WaterStorageProps> = ({ id }) => {
 
   const isSelected = selectedEquipmentId === id;
   const status = equipment?.status || 'nominal';
-  const position = equipment?.position || [12, 0, -12];
+  const rawPos = equipment?.position || [28, 0, -24];
+  const groundY = getLunarHeight(rawPos[0], rawPos[2]);
 
   // Water level ratio
   const waterPct = telemetry.waterReservePct;
@@ -26,7 +29,7 @@ export const WaterStorage: React.FC<WaterStorageProps> = ({ id }) => {
   return (
     <group
       ref={groupRef}
-      position={position}
+      position={[rawPos[0], groundY, rawPos[2]]}
       onClick={(e) => {
         e.stopPropagation();
         selectEquipment(id);

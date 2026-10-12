@@ -7,7 +7,9 @@ export type EquipmentType =
   | 'oxygen_generation'
   | 'solid_waste_unit'
   | 'nuclear_power'
-  | 'power_distribution';
+  | 'power_distribution'
+  | 'lunar_lander'
+  | 'lunar_rover';
 
 export type EquipmentStatus = 'nominal' | 'warning' | 'critical' | 'offline';
 
@@ -54,4 +56,17 @@ export interface EquipmentItem {
   
   // Detailed telemetry metrics dictionary
   metrics: Record<string, TelemetryMetric>;
+
+  // Subsystem specific operational states
+  customState?: {
+    trackingMode?: 'auto' | 'stow' | 'manual';
+    dustCleanCycles?: number;
+    reserveLocked?: boolean;
+    vcdActive?: boolean;
+    pyroActive?: boolean;
+    nuclearOnline?: boolean;
+    airlockSealed?: boolean;
+    sterilizationActive?: boolean;
+    lastActionMessage?: string;
+  };
 }

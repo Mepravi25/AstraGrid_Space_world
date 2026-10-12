@@ -16,21 +16,21 @@ export const LunarSky: React.FC = () => {
     <>
       {/* High-density starfield */}
       <Stars
-        radius={150}
-        depth={60}
-        count={6000}
-        factor={4}
+        radius={380}
+        depth={160}
+        count={8500}
+        factor={5}
         saturation={0}
         fade
-        speed={0.5}
+        speed={0.3}
       />
 
       {/* Distant Earth hanging in the black lunar sky */}
-      <group position={[80, 55, -120]}>
+      <group position={[140, 95, -190]}>
         <group ref={earthRef}>
           {/* Earth sphere */}
           <mesh>
-            <sphereGeometry args={[7.5, 32, 32]} />
+            <sphereGeometry args={[14.5, 32, 32]} />
             <meshStandardMaterial
               color="#1e40af"
               roughness={0.7}

@@ -8,11 +8,13 @@ import { OxygenGeneration } from './equipment/OxygenGeneration';
 import { SolidWasteUnit } from './equipment/SolidWasteUnit';
 import { NuclearPowerUnit } from './equipment/NuclearPowerUnit';
 import { PowerDistribution } from './equipment/PowerDistribution';
+import { LunarLander } from './equipment/LunarLander';
+import { LunarRover } from './equipment/LunarRover';
 
 export const HabitatComplex: React.FC = () => {
   return (
     <group>
-      {/* 1. Primary Photovoltaic Array */}
+      {/* 1. Primary Photovoltaic Array & Field */}
       <SolarArray id="solar-array-alpha" />
 
       {/* 2. Main Habitat and Crew Modules */}
@@ -38,6 +40,12 @@ export const HabitatComplex: React.FC = () => {
 
       {/* 9. Microgrid Power Distribution Substation */}
       <PowerDistribution id="power-distribution-hub" />
+
+      {/* 10. Autonomous Lunar Lander on Landing Pad */}
+      <LunarLander id="lunar-lander-alpha" />
+
+      {/* 11. Pressurized Lunar Exploration Rover */}
+      <LunarRover id="lunar-rover-unit" />
     </group>
   );
 };
