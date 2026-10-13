@@ -26,6 +26,53 @@ export const SOLAR_FLUX_NOMINAL_W_M2 = 1361.0;
 export const KILOPOWER_BASELOAD_KW = 40.0;
 export const SOLAR_ARRAY_PEAK_KW = 120.0;
 
+// Re-export RFC and Water Management Contracts
+export type {
+  RFCOperatingMode,
+  RFCConfig,
+  RFCState,
+  ElectrolyzerStepInput,
+  ElectrolyzerStepResult,
+  FuelCellStepInput,
+  FuelCellStepResult,
+  RFCStepInput,
+  RFCStepResult,
+} from './rfcModel.ts';
+export {
+  DEFAULT_RFC_CONFIG,
+  HYDROGEN_LHV_KWH_PER_KG,
+  DEFAULT_STOICHIOMETRIC_O2_PER_H2_RATIO,
+  DEFAULT_STOICHIOMETRIC_WATER_PER_H2_RATIO,
+  WATER_DENSITY_KG_PER_L,
+  createDefaultRFCConfig,
+  createDefaultRFCState,
+  calculateUsableStoredEnergy,
+} from './rfcModel.ts';
+export type { RFCWaterFlowRecord } from './waterManagement.ts';
+import type { RFCState, RFCStepResult } from './rfcModel.ts';
+import { createDefaultRFCState } from './rfcModel.ts';
+import type { RFCWaterFlowRecord } from './waterManagement.ts';
+
+// ============================================================================
+// Energy Resilience & Emergency Operating States (Modules 5 & 6)
+// ============================================================================
+
+export type EnergyManagementState =
+  | 'NORMAL'
+  | 'SOLAR_SHORTAGE'
+  | 'BATTERY_SUPPORT'
+  | 'RFC_SUPPORT'
+  | 'ENERGY_CONSERVATION'
+  | 'CRITICAL_POWER_SHORTAGE'
+  | 'RECOVERY';
+
+export type PowerDeficitType =
+  | 'NONE'
+  | 'FLEXIBLE_CURTAILMENT'
+  | 'PARTIAL_ESSENTIAL_DEFICIT'
+  | 'COMPLETE_LOSS_OF_GENERATION';
+
+
 // Non-deferrable Essential Loads (Total ~40.1 kW)
 export const ESSENTIAL_LOAD_RATINGS = {
   mainHabitatLifeSupport: 22.5,  // Pressurization, crew cabin, avionics
@@ -137,6 +184,20 @@ export interface HabitatResourceState {
   isEmergencyReserveBreached: boolean;
   /** Flag raised if life-critical essential load had to be curtailed */
   isLifeSupportCompromised: boolean;
+  /** Regenerative Fuel Cell (RFC) energy storage subsystem state */
+  rfcState?: RFCState;
+  /** Current energy management & resilience state */
+  energyManagementState?: EnergyManagementState;
+  /** Deficit classification */
+  deficitType?: PowerDeficitType;
+  /** Duration of active electrical shortage (hours) */
+  shortageDurationHours?: number;
+  /** Cumulative electrical energy deficit of essential life support (kWh) */
+  cumulativeUnmetEssentialEnergyKWh?: number;
+  /** Battery energy safely dischargeable above emergency reserve floor (kWh) */
+  safeBatteryEnergyAvailableKWh?: number;
+  /** Maximum safe battery power deliverable to the bus without reserve breach (kW) */
+  safeBatteryPowerAvailableKW?: number;
 }
 
 // ============================================================================
@@ -369,6 +430,28 @@ export interface StepResult {
   isSafe: boolean;
   /** True if generation + storage could not satisfy demand, leading to unmet load */
   isInfeasible: boolean;
+  /** Power delivered from regenerative fuel cell discharging to the bus (kW) */
+  rfcGenerationKW?: number;
+  /** Power delivered into regenerative fuel cell electrolyzer from the bus (kW) */
+  rfcChargeKW?: number;
+  /** Detailed RFC step telemetry, if RFC is active */
+  rfcStep?: RFCStepResult;
+  /** RFC water interface flow record for the step */
+  rfcWaterFlow?: RFCWaterFlowRecord;
+  /** Current energy dispatch and resilience state */
+  energyManagementState?: EnergyManagementState;
+  /** Classification of power deficit, if any */
+  deficitType?: PowerDeficitType;
+  /** Consecutive hours of current power shortage */
+  shortageDurationHours?: number;
+  /** Cumulative energy shortfall of essential loads (kWh) */
+  cumulativeUnmetEssentialEnergyKWh?: number;
+  /** Safe battery discharge energy available above emergency reserve (kWh) */
+  safeBatteryEnergyAvailableKWh?: number;
+  /** Battery power safely available at bus without breaching reserve (kW) */
+  safeBatteryPowerAvailableKW?: number;
+  /** Net available surplus power after serving essential and flexible loads (kW) */
+  availableSurplusPowerKW?: number;
 }
 
 // ============================================================================
@@ -441,6 +524,10 @@ export function createDefaultResourceState(
   const recoverableWaterLiters = overrides?.recoverableWaterLiters ?? 120.0;
   const cumulativeUnmetWaterL = overrides?.cumulativeUnmetWaterL ?? 0.0;
 
+  const minReserveKWh = DEFAULT_BATTERY_CONFIG.capacityKWh * (DEFAULT_BATTERY_CONFIG.minReserveSocPct / 100.0);
+  const safeBatteryEnergyAvailableKWh = Math.max(0, batteryStoredKWh - minReserveKWh);
+  const safeBatteryPowerAvailableKW = (safeBatteryEnergyAvailableKWh * DEFAULT_BATTERY_CONFIG.dischargeEfficiency) / SIMULATION_TIMESTEP_HOURS;
+
   return {
     timestampHour: 0,
     sol: 14.48,
@@ -456,6 +543,13 @@ export function createDefaultResourceState(
     isLifeSupportCompromised: false,
     recoverableWaterLiters,
     cumulativeUnmetWaterL,
+    energyManagementState: 'NORMAL',
+    deficitType: 'NONE',
+    shortageDurationHours: 0,
+    cumulativeUnmetEssentialEnergyKWh: 0.0,
+    safeBatteryEnergyAvailableKWh,
+    safeBatteryPowerAvailableKW,
+    rfcState: overrides?.rfcState ?? createDefaultRFCState(),
     ...overrides,
   };
 }
@@ -488,6 +582,27 @@ export function validateStateInvariants(
   }
   if (state.recoverableWaterLiters !== undefined && state.recoverableWaterLiters < 0) {
     errors.push(`Recoverable wastewater liters cannot be negative: ${state.recoverableWaterLiters} L`);
+  }
+  if (state.rfcState) {
+    if (state.rfcState.h2StoredKg < 0) {
+      errors.push(`RFC hydrogen inventory cannot be negative: ${state.rfcState.h2StoredKg} kg`);
+    }
+    if (state.rfcState.h2StoredKg > state.rfcState.h2CapacityKg * 1.05) {
+      errors.push(
+        `RFC hydrogen inventory (${state.rfcState.h2StoredKg} kg) exceeds capacity (${state.rfcState.h2CapacityKg} kg)`
+      );
+    }
+    if (state.rfcState.o2StoredKg < 0) {
+      errors.push(`RFC oxygen inventory cannot be negative: ${state.rfcState.o2StoredKg} kg`);
+    }
+    if (state.rfcState.o2StoredKg > state.rfcState.o2CapacityKg * 1.05) {
+      errors.push(
+        `RFC oxygen inventory (${state.rfcState.o2StoredKg} kg) exceeds capacity (${state.rfcState.o2CapacityKg} kg)`
+      );
+    }
+    if (state.rfcState.waterInventoryL !== undefined && state.rfcState.waterInventoryL < 0) {
+      errors.push(`RFC water feedstock cannot be negative: ${state.rfcState.waterInventoryL} L`);
+    }
   }
 
   return {

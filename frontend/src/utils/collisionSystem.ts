@@ -63,6 +63,9 @@ export const BASE_COLLIDERS: WorldCollider[] = [
   // 11. Lunar Rover & Exploration Depot
   { type: 'box', x: 70, z: 50, halfWidth: 4.0, halfDepth: 3.2, name: 'Lunar Rover Station' },
 
+  // 12. Regenerative Fuel Cell (RFC) Power Unit
+  { type: 'box', x: -16, z: 10, halfWidth: 3.2, halfDepth: 2.2, name: 'RFC Power Unit' },
+
   // Large perimeter boulders
   { type: 'cylinder', x: -24, z: -35, radius: 2.4, name: 'Lunar Boulder 1' },
   { type: 'cylinder', x: 32, z: 42, radius: 2.2, name: 'Lunar Boulder 2' },

@@ -6,6 +6,8 @@ import { EquipmentInspector } from './components/hud/EquipmentInspector';
 import { EquipmentFleetBar } from './components/hud/EquipmentFleetBar';
 import { ExplorationOverlay } from './components/hud/ExplorationOverlay';
 import { SimulationTicker } from './components/simulation/SimulationTicker';
+import { RFCPanel } from './components/hud/RFCPanel';
+import { ResourceMonitoringPanel } from './components/hud/ResourceMonitoringPanel';
 import { useHabitatStore } from './store/useHabitatStore';
 
 export function App() {
@@ -30,6 +32,12 @@ export function App() {
 
       {/* Primary Astronaut Exploration Overlay (Reticle, Contextual Prompts, Compass, Mode Switcher) */}
       <ExplorationOverlay />
+
+      {/* Live Resource Monitoring Dashboard (Module 1) */}
+      <ResourceMonitoringPanel />
+
+      {/* Regenerative Fuel Cell & Water Interface Monitoring Panel */}
+      <RFCPanel />
 
       {/* Equipment Inspector Side Panel (Shown when equipment is targeted/selected) */}
       {(hudMode === 'inspect' || selectedEquipmentId !== null) && hudMode !== 'hidden' && (

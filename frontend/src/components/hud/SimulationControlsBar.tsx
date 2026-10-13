@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, FastForward, SlidersHorizontal, Info } from 'lucide-react';
+import { Play, Pause, RotateCcw, FastForward, SlidersHorizontal, Info, Zap, Activity, Tag } from 'lucide-react';
 import { useHabitatStore } from '../../store/useHabitatStore';
 import { PREDEFINED_SCENARIOS } from '../../data/scenarios';
 
@@ -12,6 +12,12 @@ export const SimulationControlsBar: React.FC = () => {
   const resetSimulation = useHabitatStore((state) => state.resetSimulation);
   const setSimSpeed = useHabitatStore((state) => state.setSimSpeed);
   const loadScenario = useHabitatStore((state) => state.loadScenario);
+  const isRFCPanelOpen = useHabitatStore((state) => state.isRFCPanelOpen);
+  const toggleRFCPanel = useHabitatStore((state) => state.toggleRFCPanel);
+  const isResourceMonitoringOpen = useHabitatStore((state) => state.isResourceMonitoringOpen);
+  const toggleResourceMonitoring = useHabitatStore((state) => state.toggleResourceMonitoring);
+  const showResourceLabels = useHabitatStore((state) => state.showResourceLabels);
+  const toggleResourceLabels = useHabitatStore((state) => state.toggleResourceLabels);
 
   const currentScenario = PREDEFINED_SCENARIOS.find((s) => s.id === currentScenarioId);
 
@@ -46,6 +52,44 @@ export const SimulationControlsBar: React.FC = () => {
         >
           <RotateCcw className="w-3.5 h-3.5 text-slate-300" />
           <span>RESET</span>
+        </button>
+
+        <div className="w-[1px] h-5 bg-slate-700/60" />
+
+        {/* Resource Monitoring Dashboard Toggle */}
+        <button
+          onClick={toggleResourceMonitoring}
+          className={`hud-btn ${
+            isResourceMonitoringOpen ? 'active border-cyan-400 text-cyan-300 font-bold' : ''
+          }`}
+          title="Toggle Live Resource Monitoring Dashboard"
+        >
+          <Activity className="w-3.5 h-3.5 text-cyan-400" />
+          <span>MONITOR</span>
+        </button>
+
+        {/* RFC Telemetry Panel Toggle */}
+        <button
+          onClick={toggleRFCPanel}
+          className={`hud-btn ${
+            isRFCPanelOpen ? 'active border-cyan-400 text-cyan-300 font-bold' : ''
+          }`}
+          title="Toggle Regenerative Fuel Cell Telemetry & Controls"
+        >
+          <Zap className="w-3.5 h-3.5 text-cyan-400" />
+          <span>RFC PANEL</span>
+        </button>
+
+        {/* Floating Resource Labels 3D Toggle (Module 1B) */}
+        <button
+          onClick={toggleResourceLabels}
+          className={`hud-btn ${
+            showResourceLabels ? 'active border-cyan-400 text-cyan-300 font-bold' : ''
+          }`}
+          title="Toggle Floating Resource Labels in 3D Lunar Scene"
+        >
+          <Tag className="w-3.5 h-3.5 text-cyan-400" />
+          <span>LABELS</span>
         </button>
 
         <div className="w-[1px] h-5 bg-slate-700/60" />

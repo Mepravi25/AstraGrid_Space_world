@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { LunarSky } from './LunarSky';
 import { LunarTerrain } from './LunarTerrain';
 import { HabitatComplex } from './HabitatComplex';
+import { FloatingResourceLabels } from './FloatingResourceLabels';
 import { CameraController } from './CameraController';
 import { FirstPersonPlayerController } from './FirstPersonPlayerController';
 import { useHabitatStore } from '../../store/useHabitatStore';
@@ -223,6 +224,7 @@ export const LunarScene: React.FC = React.memo(() => {
           <LunarSky />
           <LunarTerrain />
           <HabitatComplex />
+          <FloatingResourceLabels />
           {explorationMode === 'first_person' ? (
             <FirstPersonPlayerController />
           ) : (

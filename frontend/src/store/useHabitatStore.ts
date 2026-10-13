@@ -1,8 +1,11 @@
 import { create } from 'zustand';
-import { EquipmentItem, EquipmentStatus } from '../types/equipment';
-import { HabitatTelemetry, HabitatSystemStatus } from '../types/simulation';
-import { INITIAL_EQUIPMENT_DATA } from '../data/initialEquipment';
-import { PREDEFINED_SCENARIOS } from '../data/scenarios';
+import type { EquipmentItem, EquipmentStatus } from '../types/equipment.ts';
+import type { HabitatTelemetry, HabitatSystemStatus, SimulationEventLogItem } from '../types/simulation.ts';
+import { INITIAL_EQUIPMENT_DATA } from '../data/initialEquipment.ts';
+import { PREDEFINED_SCENARIOS } from '../data/scenarios.ts';
+import type { RFCConfig, RFCState } from '../simulation/rfcModel.ts';
+import { DEFAULT_RFC_CONFIG, createDefaultRFCState, stepRFC } from '../simulation/rfcModel.ts';
+import type { EnergyManagementState } from '../simulation/types.ts';
 
 export type ExplorationMode = 'first_person' | 'free_cam';
 export type HudMode = 'explore' | 'inspect' | 'mission_control' | 'hidden';
@@ -78,6 +81,31 @@ interface HabitatStoreState {
   setSimSpeed: (speed: number) => void;
   loadScenario: (scenarioId: string) => void;
   tickSimulation: (deltaRealSeconds: number) => void;
+
+  // Regenerative Fuel Cell (RFC) Subsystem & Resilience
+  rfcState: RFCState;
+  rfcConfig: RFCConfig;
+  rfcModeOverride: 'auto' | 'electrolyzing' | 'generating' | 'idle' | 'disabled';
+  isRFCPanelOpen: boolean;
+  activeRFCTab: 'rfc' | 'water_planned' | 'events';
+  eventLog: SimulationEventLogItem[];
+  toggleRFCPanel: () => void;
+  setRFCPanelOpen: (open: boolean) => void;
+  setActiveRFCTab: (tab: 'rfc' | 'water_planned' | 'events') => void;
+  setRFCEnabled: (enabled: boolean) => void;
+  setRFCModeOverride: (mode: 'auto' | 'electrolyzing' | 'generating' | 'idle' | 'disabled') => void;
+  addEventLogItem: (item: Omit<SimulationEventLogItem, 'id'>) => void;
+  clearEventLog: () => void;
+
+  // Live Resource Monitoring Dashboard
+  isResourceMonitoringOpen: boolean;
+  toggleResourceMonitoring: () => void;
+  setResourceMonitoringOpen: (open: boolean) => void;
+
+  // Floating 3D Resource Labels (Module 1B)
+  showResourceLabels: boolean;
+  toggleResourceLabels: () => void;
+  setShowResourceLabels: (show: boolean) => void;
 }
 
 const computeAggregateTelemetry = (
@@ -85,7 +113,11 @@ const computeAggregateTelemetry = (
   sol: number,
   baseTimeSeconds: number,
   batterySoc: number,
-  waterLiters: number
+  waterLiters: number,
+  rfcGeneratingKW: number = 0,
+  rfcElectrolyzingKW: number = 0,
+  shortageDurationHours: number = 0,
+  cumulativeUnmetEssentialKWh: number = 0
 ): HabitatTelemetry => {
   let solarGen = 0;
   let nuclearGen = 0;
@@ -110,13 +142,35 @@ const computeAggregateTelemetry = (
     }
   }
 
-  const totalGen = solarGen + nuclearGen;
-  const netPower = totalGen - demand;
+  const totalGen = solarGen + nuclearGen + rfcGeneratingKW;
+  const demandTotal = demand + rfcElectrolyzingKW;
+  const netPower = totalGen - demandTotal;
+
+  const essentialDemandKW = 40.1;
+  const flexibleDemandKW = Math.max(0, demand - essentialDemandKW);
+  const safeBatteryEnergyKWh = Math.max(0, (batterySoc / 100) * 500 - 100.0);
+  const safeBatteryPowerKW = Math.min(100.0, safeBatteryEnergyKWh * 0.95);
+  const busPowerAvailable = totalGen + safeBatteryPowerKW;
+  const unmetEssentialLoadKW = Math.max(0, essentialDemandKW - busPowerAvailable);
+  const flexibleLoadsDeferredKW = busPowerAvailable < demandTotal ? Math.min(flexibleDemandKW, demandTotal - busPowerAvailable) : 0;
+
+  let energyManagementState: EnergyManagementState = 'NORMAL';
+  if (solarGen <= 5) {
+    if (unmetEssentialLoadKW > 0.001) energyManagementState = 'CRITICAL_POWER_SHORTAGE';
+    else if (rfcGeneratingKW > 0.001) energyManagementState = 'RFC_SUPPORT';
+    else if (batterySoc > 20) energyManagementState = 'BATTERY_SUPPORT';
+    else if (flexibleLoadsDeferredKW > 0) energyManagementState = 'ENERGY_CONSERVATION';
+    else energyManagementState = 'SOLAR_SHORTAGE';
+  } else if (solarGen > 20 && batterySoc < 95) {
+    energyManagementState = 'RECOVERY';
+  } else {
+    energyManagementState = 'NORMAL';
+  }
 
   let overallStatus: HabitatSystemStatus = 'nominal';
-  if (hasCritical || batterySoc < 25) {
+  if (hasCritical || batterySoc < 25 || unmetEssentialLoadKW > 0.001) {
     overallStatus = 'critical';
-  } else if (hasWarning || batterySoc < 40 || netPower < -20) {
+  } else if (hasWarning || batterySoc < 40 || netPower < -20 || flexibleLoadsDeferredKW > 0) {
     overallStatus = 'warning';
   }
 
@@ -138,12 +192,14 @@ const computeAggregateTelemetry = (
     solarGenerationKW: Number(solarGen.toFixed(1)),
     nuclearGenerationKW: Number(nuclearGen.toFixed(1)),
     totalGenerationKW: Number(totalGen.toFixed(1)),
-    totalDemandKW: Number(demand.toFixed(1)),
+    totalDemandKW: Number(demandTotal.toFixed(1)),
     netPowerKW: Number(netPower.toFixed(1)),
     batterySocPct: Number(Math.max(0, Math.min(100, batterySoc)).toFixed(1)),
     batteryCapacityKWh: 500,
     batteryStoredKWh: Number(((batterySoc / 100) * 500).toFixed(1)),
     batteryNetFlowKW: Number(netPower.toFixed(1)),
+    batteryMinReservePct: 20.0,
+    batteryMinReserveKWh: 100.0,
     potableWaterLiters: Math.round(waterLiters),
     potableWaterCapacityL: 3000,
     waterReservePct: Number(((waterLiters / 3000) * 100).toFixed(1)),
@@ -156,7 +212,14 @@ const computeAggregateTelemetry = (
     recycledMaterialKg: 312.0,
     activeEquipmentCount: activeCount,
     totalEquipmentCount: items.length,
-    overallStatus
+    overallStatus,
+    essentialDemandKW,
+    flexibleDemandKW,
+    flexibleLoadsDeferredKW,
+    unmetEssentialLoadKW: Number(unmetEssentialLoadKW.toFixed(2)),
+    energyManagementState,
+    shortageDurationHours: Number(shortageDurationHours.toFixed(2)),
+    cumulativeUnmetEssentialKWh: Number(cumulativeUnmetEssentialKWh.toFixed(2)),
   };
 };
 
@@ -180,6 +243,33 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
       initialSoc,
       initialWater
     ),
+
+    // Regenerative Fuel Cell Subsystem initial state
+    rfcState: createDefaultRFCState(),
+    rfcConfig: DEFAULT_RFC_CONFIG,
+    rfcModeOverride: 'auto',
+    isRFCPanelOpen: false,
+    activeRFCTab: 'rfc',
+    isResourceMonitoringOpen: true,
+    showResourceLabels: true,
+    eventLog: [
+      {
+        id: 'evt-init-1',
+        timestampStr: 'SOL 14 — 11:30:00',
+        eventType: 'info',
+        title: 'Microgrid Telemetry Synchronized',
+        details: 'Kilopower 40.0 kWe baseload nominal. Solar array tracking enabled.',
+        severity: 'info',
+      },
+      {
+        id: 'evt-init-2',
+        timestampStr: 'SOL 14 — 11:30:05',
+        eventType: 'info',
+        title: 'RFC Subsystem Operational',
+        details: 'H2 (12.0 kg) and O2 (96.0 kg) storage pressurized. Water feedstock nominal.',
+        severity: 'info',
+      },
+    ],
 
     // Immersive controller default state
     explorationMode: 'first_person',
@@ -662,12 +752,51 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
         equipment: baseEquipment,
         currentScenarioId: 'nominal_daytime',
         telemetry: newTelem,
+        rfcState: createDefaultRFCState(),
         isSimulating: true,
         simSpeed: 1
       });
     },
 
     setSimSpeed: (speed: number) => set({ simSpeed: speed }),
+
+    // RFC Subsystem Actions
+    toggleRFCPanel: () => set((state) => ({ isRFCPanelOpen: !state.isRFCPanelOpen })),
+    setRFCPanelOpen: (open: boolean) => set({ isRFCPanelOpen: open }),
+
+    // Live Resource Monitoring Dashboard Actions
+    toggleResourceMonitoring: () => set((state) => ({ isResourceMonitoringOpen: !state.isResourceMonitoringOpen })),
+    setResourceMonitoringOpen: (open: boolean) => set({ isResourceMonitoringOpen: open }),
+
+    // Floating 3D Resource Labels Actions
+    toggleResourceLabels: () => set((state) => ({ showResourceLabels: !state.showResourceLabels })),
+    setShowResourceLabels: (show: boolean) => set({ showResourceLabels: show }),
+    setActiveRFCTab: (tab: 'rfc' | 'water_planned' | 'events') => set({ activeRFCTab: tab }),
+    setRFCEnabled: (enabled: boolean) =>
+      set((state) => ({
+        rfcState: { ...state.rfcState, isEnabled: enabled, mode: enabled ? 'idle' : 'unavailable' },
+        rfcConfig: { ...state.rfcConfig, enabled },
+      })),
+    setRFCModeOverride: (mode: 'auto' | 'electrolyzing' | 'generating' | 'idle' | 'disabled') =>
+      set((state) => {
+        let nextMode = state.rfcState.mode;
+        if (mode === 'idle') nextMode = 'idle';
+        else if (mode === 'disabled') nextMode = 'unavailable';
+        else if (mode === 'electrolyzing' && state.rfcState.isEnabled) nextMode = 'electrolyzing';
+        else if (mode === 'generating' && state.rfcState.isEnabled) nextMode = 'generating';
+        return {
+          rfcModeOverride: mode,
+          rfcState: { ...state.rfcState, mode: nextMode },
+        };
+      }),
+    addEventLogItem: (item: Omit<SimulationEventLogItem, 'id'>) =>
+      set((state) => ({
+        eventLog: [
+          { ...item, id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` },
+          ...state.eventLog.slice(0, 49),
+        ],
+      })),
+    clearEventLog: () => set({ eventLog: [] }),
 
     loadScenario: (scenarioId: string) => {
       const scenario = PREDEFINED_SCENARIOS.find((s) => s.id === scenarioId);
@@ -702,22 +831,14 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
     },
 
     tickSimulation: (deltaRealSeconds: number) => {
-      const { isSimulating, simSpeed, telemetry, equipment } = get();
+      const { isSimulating, simSpeed, telemetry, equipment, rfcState, rfcConfig, rfcModeOverride, eventLog } = get();
       if (!isSimulating) return;
 
       // Accelerated simulation time: 1 real second = 60 * simSpeed sim seconds
       const simDeltaSeconds = deltaRealSeconds * 60 * simSpeed;
       const newSol = telemetry.missionElapsedSol + simDeltaSeconds / (24 * 3600);
       const newTotalSeconds = newSol * 24 * 3600;
-
-      // Net energy balance dynamically affects battery SoC
       const deltaHours = simDeltaSeconds / 3600;
-      const energyDeltaKWh = telemetry.netPowerKW * deltaHours * 0.95;
-      const newStoredKWh = Math.max(
-        0,
-        Math.min(telemetry.batteryCapacityKWh, telemetry.batteryStoredKWh + energyDeltaKWh)
-      );
-      const newBatterySoc = (newStoredKWh / telemetry.batteryCapacityKWh) * 100;
 
       // Minor water dynamic
       const waterDeltaL =
@@ -727,15 +848,188 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
         Math.min(telemetry.potableWaterCapacityL, telemetry.potableWaterLiters + waterDeltaL)
       );
 
+      // Baseline power balance directly from equipment items before storage/RFC
+      let solarGenKW = 0;
+      let nuclearGenKW = 0;
+      let equipmentDemandKW = 0;
+      for (const item of equipment) {
+        if (item.status !== 'offline') {
+          if (item.type === 'solar_array') solarGenKW += Math.max(0, item.powerKW);
+          else if (item.type === 'nuclear_power') nuclearGenKW += Math.max(0, item.powerKW);
+          else if (item.powerKW < 0) equipmentDemandKW += Math.abs(item.powerKW);
+        }
+      }
+      const baseNetPowerKW = solarGenKW + nuclearGenKW - equipmentDemandKW;
+      const minReserveKWh = 500 * 0.20; // 100 kWh hard reserve floor
+
+      let newStoredKWh = telemetry.batteryStoredKWh;
+      let newRFCState = rfcState;
+      let rfcGenKW = 0;
+      let rfcElyKW = 0;
+
+      if (baseNetPowerKW >= 0) {
+        // Generation Surplus: charge battery up to headroom/rate, route excess to RFC electrolyzer
+        const surplusKW = baseNetPowerKW;
+        const batteryHeadroomKWh = Math.max(0, 500 - telemetry.batteryStoredKWh);
+        const maxChargeKW = Math.min(80.0, batteryHeadroomKWh / (0.95 * Math.max(0.001, deltaHours)));
+        const batteryChargeKW = Math.min(surplusKW, maxChargeKW);
+        const surplusAfterBatteryKW = Math.max(0, surplusKW - batteryChargeKW);
+
+        const batteryEnergyDeltaKWh = batteryChargeKW * 0.95 * deltaHours;
+        newStoredKWh = Math.min(500, telemetry.batteryStoredKWh + batteryEnergyDeltaKWh);
+
+        if (rfcState.isEnabled && rfcConfig.enabled && rfcModeOverride !== 'disabled') {
+          const rfcStepRes = stepRFC({
+            currentState: rfcState,
+            availableSurplusPowerKW: surplusAfterBatteryKW,
+            requestedDischargeKW: 0,
+            modeOverride: rfcModeOverride,
+            dtHours: deltaHours,
+            config: rfcConfig,
+          });
+          newRFCState = rfcStepRes.nextState;
+          rfcElyKW = rfcStepRes.electricalInputKW;
+          rfcGenKW = 0;
+        }
+      } else {
+        // Generation Deficit: discharge battery above 20% floor, route remaining deficit to RFC fuel cell
+        const deficitKW = -baseNetPowerKW;
+        const safeBatteryEnergyKWh = Math.max(0, telemetry.batteryStoredKWh - minReserveKWh);
+        const maxSafeDischargeKW = Math.min(100.0, (safeBatteryEnergyKWh * 0.95) / Math.max(0.001, deltaHours));
+        const batteryDischargeKW = Math.min(deficitKW, maxSafeDischargeKW);
+        const deficitAfterBatteryKW = Math.max(0, deficitKW - batteryDischargeKW);
+
+        const chemDrawnKWh = (batteryDischargeKW * deltaHours) / 0.95;
+        newStoredKWh = Math.max(minReserveKWh, telemetry.batteryStoredKWh - chemDrawnKWh);
+
+        if (rfcState.isEnabled && rfcConfig.enabled && rfcModeOverride !== 'disabled') {
+          const rfcStepRes = stepRFC({
+            currentState: rfcState,
+            availableSurplusPowerKW: 0,
+            requestedDischargeKW: deficitAfterBatteryKW,
+            modeOverride: rfcModeOverride,
+            dtHours: deltaHours,
+            config: rfcConfig,
+          });
+          newRFCState = rfcStepRes.nextState;
+          rfcGenKW = rfcStepRes.electricalOutputKW;
+          rfcElyKW = 0;
+        }
+      }
+
+      const newBatterySoc = (newStoredKWh / 500) * 100;
+
+      // Cumulative shortage tracking
+      const safeBatteryPowerKW = Math.min(100.0, Math.max(0, (newStoredKWh - minReserveKWh) * 0.95));
+      const busPowerAvailable = solarGenKW + nuclearGenKW + rfcGenKW + safeBatteryPowerKW;
+      const currentUnmetEssentialKW = Math.max(0, 40.1 - busPowerAvailable);
+
+      const nextShortageDuration = currentUnmetEssentialKW > 0.001
+        ? (telemetry.shortageDurationHours ?? 0) + deltaHours
+        : 0;
+      const nextCumulativeUnmet = (telemetry.cumulativeUnmetEssentialKWh ?? 0) + (currentUnmetEssentialKW * deltaHours);
+
       const newTelem = computeAggregateTelemetry(
         equipment,
         newSol,
         newTotalSeconds,
         newBatterySoc,
-        newWater
+        newWater,
+        rfcGenKW,
+        rfcElyKW,
+        nextShortageDuration,
+        nextCumulativeUnmet
       );
 
-      set({ telemetry: newTelem });
+      // Detect state transitions and append actual events
+      const newEvents: SimulationEventLogItem[] = [];
+      const timestampStr = newTelem.missionTimeStr;
+
+      if (telemetry.solarGenerationKW > 15 && newTelem.solarGenerationKW <= 5) {
+        newEvents.push({
+          id: `evt-${Date.now()}-sol-dec`,
+          timestampStr,
+          eventType: 'solar_decreased',
+          title: 'Solar Generation Decreased',
+          details: `Solar irradiance dropped to ${newTelem.solarGenerationKW} kW. BESS taking load.`,
+          severity: 'warning',
+        });
+      } else if (telemetry.solarGenerationKW <= 5 && newTelem.solarGenerationKW > 15) {
+        newEvents.push({
+          id: `evt-${Date.now()}-sol-rec`,
+          timestampStr,
+          eventType: 'solar_recovered',
+          title: 'Solar Generation Recovered',
+          details: `Solar irradiance returned to ${newTelem.solarGenerationKW} kW. Resuming battery and RFC charging.`,
+          severity: 'success',
+        });
+      }
+
+      if (telemetry.batterySocPct > 20.0 && newBatterySoc <= 20.0) {
+        newEvents.push({
+          id: `evt-${Date.now()}-bat-res`,
+          timestampStr,
+          eventType: 'battery_reserve_reached',
+          title: 'Battery Reserve Floor (20%) Reached',
+          details: 'Discharge halted to protect cell longevity. Requesting RFC fuel cell generation.',
+          severity: 'critical',
+        });
+      }
+
+      if (rfcState.mode !== newRFCState.mode) {
+        if (newRFCState.mode === 'generating') {
+          newEvents.push({
+            id: `evt-${Date.now()}-rfc-gen`,
+            timestampStr,
+            eventType: 'rfc_activated',
+            title: 'RFC Fuel Cell Online',
+            details: `Fuel cell generating to support habitat microgrid from stored H2/O2.`,
+            severity: 'info',
+          });
+        } else if (newRFCState.mode === 'electrolyzing') {
+          newEvents.push({
+            id: `evt-${Date.now()}-rfc-ely`,
+            timestampStr,
+            eventType: 'rfc_activated',
+            title: 'RFC Electrolyzer Online',
+            details: 'Surplus solar electricity routed to produce hydrogen and oxygen.',
+            severity: 'info',
+          });
+        }
+      }
+
+      if (
+        rfcState.usableElectricalEnergyKWh > 0.05 &&
+        newRFCState.usableElectricalEnergyKWh <= 0.05 &&
+        newRFCState.mode === 'generating'
+      ) {
+        newEvents.push({
+          id: `evt-${Date.now()}-rfc-exh`,
+          timestampStr,
+          eventType: 'rfc_fuel_exhausted',
+          title: 'RFC Reactants Exhausted',
+          details: 'Hydrogen and oxygen storage depleted. Generation ceased.',
+          severity: 'warning',
+        });
+      }
+
+      if (
+        newTelem.energyManagementState === 'CRITICAL_POWER_SHORTAGE' &&
+        telemetry.energyManagementState !== 'CRITICAL_POWER_SHORTAGE'
+      ) {
+        newEvents.push({
+          id: `evt-${Date.now()}-crit-short`,
+          timestampStr,
+          eventType: 'critical_power_shortage',
+          title: 'Critical Power Shortage Detected',
+          details: `Essential life support curtailed. Honest deficit reported: ${(newTelem.unmetEssentialLoadKW ?? 0.1).toFixed(1)} kW.`,
+          severity: 'critical',
+        });
+      }
+
+      const updatedLog = newEvents.length > 0 ? [...newEvents, ...eventLog].slice(0, 50) : eventLog;
+
+      set({ telemetry: newTelem, rfcState: newRFCState, eventLog: updatedLog });
     }
   };
 });

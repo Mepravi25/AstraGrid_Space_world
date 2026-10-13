@@ -1,4 +1,4 @@
-import { ScenarioDefinition } from '../types/simulation';
+import type { ScenarioDefinition } from '../types/simulation.ts';
 
 export const PREDEFINED_SCENARIOS: ScenarioDefinition[] = [
   {

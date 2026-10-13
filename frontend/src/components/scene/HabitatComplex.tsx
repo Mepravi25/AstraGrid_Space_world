@@ -10,6 +10,7 @@ import { NuclearPowerUnit } from './equipment/NuclearPowerUnit';
 import { PowerDistribution } from './equipment/PowerDistribution';
 import { LunarLander } from './equipment/LunarLander';
 import { LunarRover } from './equipment/LunarRover';
+import { RFCPowerUnit } from './equipment/RFCPowerUnit';
 
 export const HabitatComplex: React.FC = () => {
   return (
@@ -46,6 +47,9 @@ export const HabitatComplex: React.FC = () => {
 
       {/* 11. Pressurized Lunar Exploration Rover */}
       <LunarRover id="lunar-rover-unit" />
+
+      {/* 12. Regenerative Fuel Cell (RFC) Power Unit */}
+      <RFCPowerUnit id="rfc-power-unit" />
     </group>
   );
 };

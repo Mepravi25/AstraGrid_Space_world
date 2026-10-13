@@ -29,6 +29,7 @@ import type {
   SafetyViolationRule,
   SafetyValidationResult,
   HourlyForecast,
+  RFCConfig,
 } from './types.ts';
 import {
   DEFAULT_BATTERY_CONFIG,
@@ -228,6 +229,8 @@ export function evaluateProposedStep(
   configs?: {
     batteryConfig?: BatteryConfig;
     waterConfig?: WaterConfig;
+    rfcConfig?: RFCConfig;
+    enableRFC?: boolean;
   }
 ): {
   isSafe: boolean;
@@ -243,6 +246,8 @@ export function evaluateProposedStep(
     dispatchedTaskIds,
     batteryConfig: configs?.batteryConfig,
     waterConfig: configs?.waterConfig,
+    rfcConfig: configs?.rfcConfig,
+    enableRFC: configs?.enableRFC,
     safetyConstraints: constraints,
   });
 

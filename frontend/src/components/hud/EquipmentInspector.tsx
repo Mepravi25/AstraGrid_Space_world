@@ -44,6 +44,9 @@ export const EquipmentInspector: React.FC = () => {
   const toggleNuclearReactorPower = useHabitatStore((state) => state.toggleNuclearReactorPower);
   const toggleAirlockSeal = useHabitatStore((state) => state.toggleAirlockSeal);
   const runWaterSterilization = useHabitatStore((state) => state.runWaterSterilization);
+  const toggleRFCPanel = useHabitatStore((state) => state.toggleRFCPanel);
+  const isRFCPanelOpen = useHabitatStore((state) => state.isRFCPanelOpen);
+  const rfcState = useHabitatStore((state) => state.rfcState);
 
   const equipment = equipmentList.find((e) => e.id === selectedEquipmentId);
 
@@ -148,9 +151,9 @@ export const EquipmentInspector: React.FC = () => {
             </div>
           )}
 
-          {/* 2. Battery Bank Actions */}
+          {/* 2. Battery Bank Actions & RFC Integration */}
           {equipment.type === 'battery_bank' && (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="text-[11px] font-mono text-slate-300">Reserve Protection Protocol:</div>
               <button
                 onClick={() => toggleBatteryReserveLock(equipment.id)}
@@ -172,6 +175,33 @@ export const EquipmentInspector: React.FC = () => {
                   </>
                 )}
               </button>
+
+              {/* RFC Subsystem Integration Card */}
+              <div className="p-2 rounded bg-slate-950/80 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between text-[10px] font-mono">
+                  <span className="text-cyan-300 font-bold">REGENERATIVE FUEL CELL (RFC)</span>
+                  <span className="px-1.5 py-0.2 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-400 font-bold text-[9px]">
+                    {rfcState.mode.toUpperCase()}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-[9px] font-mono text-slate-300">
+                  <div className="p-1 rounded bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400">H₂ Stored: </span>
+                    <span className="text-cyan-300 font-bold">{rfcState.h2StoredKg.toFixed(2)} kg</span>
+                  </div>
+                  <div className="p-1 rounded bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400">O₂ Stored: </span>
+                    <span className="text-teal-300 font-bold">{rfcState.o2StoredKg.toFixed(2)} kg</span>
+                  </div>
+                </div>
+                <button
+                  onClick={toggleRFCPanel}
+                  className="w-full py-1 px-2 rounded bg-cyan-500/20 border border-cyan-500/50 hover:bg-cyan-500/30 text-cyan-200 text-[10px] font-mono font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Zap className="w-3 h-3 text-cyan-400" />
+                  <span>{isRFCPanelOpen ? 'HIDE RFC DASHBOARD' : 'OPEN FULL RFC DASHBOARD'}</span>
+                </button>
+              </div>
             </div>
           )}
 

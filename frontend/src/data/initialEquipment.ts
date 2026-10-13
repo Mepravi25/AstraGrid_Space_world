@@ -1,4 +1,4 @@
-import { EquipmentItem } from '../types/equipment';
+import type { EquipmentItem } from '../types/equipment.ts';
 
 export const INITIAL_EQUIPMENT_DATA: EquipmentItem[] = [
   {

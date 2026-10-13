@@ -199,10 +199,12 @@ html, body, #root {
 .bottom-3 { bottom: 0.75rem; }
 .top-10 { top: 2.5rem; }
 .top-14 { top: 3.5rem; }
+.bottom-14 { bottom: 3.5rem; }
 .top-16 { top: 4rem; }
 .bottom-16 { bottom: 4rem; }
 .top-20 { top: 5rem; }
 .bottom-20 { bottom: 5rem; }
+.min-h-0 { min-height: 0; }
 .z-10 { z-index: 10; }
 .z-20 { z-index: 20; }
 .z-30 { z-index: 30; }
@@ -214,6 +216,14 @@ html, body, #root {
 .overflow-hidden { overflow: hidden; }
 .overflow-y-auto { overflow-y: auto; }
 .overflow-x-auto { overflow-x: auto; }
+
+/* Subtle custom scrollbar utility */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.3) rgba(15, 23, 42, 0.6);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* Backdrop blur utilities */
 .backdrop-blur-sm { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }

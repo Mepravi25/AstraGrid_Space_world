@@ -9,7 +9,10 @@ import {
   Crosshair,
   Radio,
   ChevronRight,
-  X
+  X,
+  Zap,
+  Activity,
+  Tag
 } from 'lucide-react';
 import { useHabitatStore } from '../../store/useHabitatStore';
 
@@ -33,6 +36,12 @@ export const ExplorationOverlay: React.FC = () => {
   const selectEquipment = useHabitatStore((state) => state.selectEquipment);
   const interactWithTargeted = useHabitatStore((state) => state.interactWithTargeted);
   const returnToBase = useHabitatStore((state) => state.returnToBase);
+  const isResourceMonitoringOpen = useHabitatStore((state) => state.isResourceMonitoringOpen);
+  const toggleResourceMonitoring = useHabitatStore((state) => state.toggleResourceMonitoring);
+  const isRFCPanelOpen = useHabitatStore((state) => state.isRFCPanelOpen);
+  const toggleRFCPanel = useHabitatStore((state) => state.toggleRFCPanel);
+  const showResourceLabels = useHabitatStore((state) => state.showResourceLabels);
+  const toggleResourceLabels = useHabitatStore((state) => state.toggleResourceLabels);
   const navigationNotice = useHabitatStore((state) => state.navigationNotice);
   const clearNavigationNotice = useHabitatStore((state) => state.clearNavigationNotice);
 
@@ -51,7 +60,7 @@ export const ExplorationOverlay: React.FC = () => {
 
   const targetedEquipment = equipmentList.find((e) => e.id === targetedEquipmentId);
 
-  // Global keyboard shortcuts (KeyF for flashlight, KeyE for interact, Tab for HUD)
+  // Global keyboard shortcuts (KeyF for flashlight, KeyE for interact, Tab for HUD, KeyL for labels)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const activeTag = (document.activeElement?.tagName || '').toLowerCase();
@@ -69,6 +78,9 @@ export const ExplorationOverlay: React.FC = () => {
         toggleFlashlight();
       } else if (e.code === 'KeyE') {
         interactWithTargeted();
+      } else if (e.code === 'KeyL') {
+        e.preventDefault();
+        toggleResourceLabels();
       } else if (e.code === 'Tab') {
         e.preventDefault();
         toggleHud();
@@ -77,7 +89,7 @@ export const ExplorationOverlay: React.FC = () => {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [toggleFlashlight, interactWithTargeted, toggleHud]);
+  }, [toggleFlashlight, interactWithTargeted, toggleResourceLabels, toggleHud]);
 
   // Calculate distance to targeted equipment if present
   let targetedDistanceM = 0;
@@ -250,6 +262,58 @@ export const ExplorationOverlay: React.FC = () => {
           >
             <Home className="w-3.5 h-3.5 text-cyan-400" />
             <span>BASE</span>
+          </button>
+
+          {/* Resource Monitoring Dashboard Toggle */}
+          <button
+            onClick={toggleResourceMonitoring}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono transition-all cursor-pointer ${
+              isResourceMonitoringOpen
+                ? 'bg-cyan-500/25 border-cyan-400 text-cyan-300 font-bold shadow-[0_0_10px_rgba(0,229,255,0.4)]'
+                : 'bg-slate-950/80 border-slate-800 text-cyan-400 hover:text-white hover:border-cyan-500/40'
+            }`}
+            title="Toggle Live Resource Monitoring Dashboard [MONITOR]"
+          >
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+            <span>MONITOR</span>
+          </button>
+
+          {/* RFC Telemetry Panel Toggle */}
+          <button
+            onClick={toggleRFCPanel}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono transition-all cursor-pointer ${
+              isRFCPanelOpen
+                ? 'bg-cyan-500/25 border-cyan-400 text-cyan-300 font-bold shadow-[0_0_10px_rgba(0,229,255,0.4)]'
+                : 'bg-slate-950/80 border-slate-800 text-cyan-400 hover:text-white hover:border-cyan-500/40'
+            }`}
+            title="Toggle Regenerative Fuel Cell Telemetry & Controls [RFC]"
+          >
+            <Zap className="w-3.5 h-3.5 text-cyan-400" />
+            <span>RFC</span>
+          </button>
+
+          {/* Floating 3D Resource Labels Toggle (Module 1B) */}
+          <button
+            id="hud-toggle-resource-labels"
+            onClick={toggleResourceLabels}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-mono transition-all cursor-pointer ${
+              showResourceLabels
+                ? 'bg-cyan-500/25 border-cyan-400 text-cyan-300 font-bold shadow-[0_0_10px_rgba(0,229,255,0.4)]'
+                : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-white hover:border-cyan-500/40'
+            }`}
+            title="Toggle Floating Resource Labels in 3D Lunar Scene [Key L]"
+          >
+            <Tag className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">LABELS</span>
+            <span
+              className={`px-1 py-0.2 rounded text-[10px] font-bold ${
+                showResourceLabels
+                  ? 'bg-cyan-400 text-slate-950 shadow-[0_0_6px_#00e5ff]'
+                  : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              {showResourceLabels ? 'ON' : 'OFF'}
+            </span>
           </button>
         </div>
       </div>

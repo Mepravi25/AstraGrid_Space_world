@@ -23,6 +23,7 @@ import type {
   SafetyConstraints,
   SafetyViolation,
   FlexibleTask,
+  RFCConfig,
 } from './types.ts';
 import type { ScenarioForecast } from './forecast.ts';
 import {
@@ -37,6 +38,8 @@ export interface ControllerRunnerOptions {
   batteryConfig?: BatteryConfig;
   waterConfig?: WaterConfig;
   safetyConstraints?: SafetyConstraints;
+  rfcConfig?: RFCConfig;
+  enableRFC?: boolean;
   /** Stop simulation early if catastrophic life-support curtailment occurs */
   stopOnCatastrophicFailure?: boolean;
 }
@@ -94,6 +97,8 @@ export function runControllerSimulation(
       batteryConfig,
       waterConfig,
       safetyConstraints: constraints,
+      rfcConfig: options?.rfcConfig,
+      enableRFC: options?.enableRFC,
       tasks,
       dispatchedTaskIds: decision.activeTaskIds,
     });

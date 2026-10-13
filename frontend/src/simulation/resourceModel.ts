@@ -28,15 +28,24 @@ import type {
   SafetyViolation,
   HourlyForecast,
   ControllerDecision,
+  RFCConfig,
+  RFCStepResult,
+  RFCWaterFlowRecord,
+  EnergyManagementState,
+  PowerDeficitType,
 } from './types.ts';
 import {
   DEFAULT_BATTERY_CONFIG,
   DEFAULT_WATER_CONFIG,
   DEFAULT_SAFETY_CONSTRAINTS,
+  DEFAULT_RFC_CONFIG,
   TOTAL_ESSENTIAL_LOAD_KW,
   SIMULATION_TIMESTEP_HOURS,
   LUNAR_SOL_HOURS,
+  createDefaultRFCState,
 } from './types.ts';
+import { stepRFC } from './rfcModel.ts';
+import { createRFCWaterFlowRecord } from './waterManagement.ts';
 
 export interface ResourceStepInput {
   /** Current state of habitat resources */
@@ -65,6 +74,18 @@ export interface ResourceStepInput {
   crewWaterConsumptionL?: number;
   /** Explicit water recycling override flag (if not activated via flexible task) */
   enableWaterRecovery?: boolean;
+  /** Regenerative Fuel Cell configuration */
+  rfcConfig?: RFCConfig;
+  /** Explicit flag to activate or bypass RFC during this step */
+  enableRFC?: boolean;
+  /** Explicit target operating mode override for RFC */
+  rfcModeOverride?: 'auto' | 'electrolyzing' | 'generating' | 'idle' | 'disabled';
+  /** Optional controller cap or surplus budget explicitly allocated for RFC charging (kW) */
+  rfcElectrolyzerPowerLimitKW?: number;
+  /** Optional controller cap on RFC generation power to the bus (kW) */
+  rfcGenerationLimitKW?: number;
+  /** Available RFC dedicated water feedstock override (L) */
+  availableRFCWaterL?: number;
 }
 
 /**
@@ -126,10 +147,19 @@ export function stepResourceModel(input: ResourceStepInput): StepResult {
   const netPowerBeforeStorageKW = totalGenKW - totalDemandKW;
 
   // --------------------------------------------------------------------------
-  // 3. Electrical Power Balance & Battery Dynamics
+  // 3. Electrical Power Balance & Storage Dynamics (Battery + RFC)
   // --------------------------------------------------------------------------
+  const isRFCActive =
+    input.enableRFC === true ||
+    (input.rfcConfig !== undefined && input.rfcConfig.enabled !== false);
+  const rfcConfig = input.rfcConfig ?? DEFAULT_RFC_CONFIG;
+  const currentRFCState = currentState.rfcState ?? createDefaultRFCState();
+
   let batteryChargeKW = 0;
   let batteryDischargeKW = 0;
+  let rfcChargeKW = 0;
+  let rfcGenerationKW = 0;
+  let rfcStepResult: RFCStepResult | undefined;
   let curtailedGenKW = 0;
   let batteryStoredDeltaKWh = 0;
   let batteryLossKWh = 0;
@@ -194,7 +224,29 @@ export function stepResourceModel(input: ResourceStepInput): StepResult {
     );
     batteryChargeKW = Math.max(0, batteryChargeKW);
 
-    curtailedGenKW = Math.max(0, surplusKW - batteryChargeKW);
+    const surplusAfterBatteryKW = Math.max(0, surplusKW - batteryChargeKW);
+
+    if (isRFCActive) {
+      const budgetForRFC =
+        input.rfcElectrolyzerPowerLimitKW !== undefined
+          ? Math.min(surplusAfterBatteryKW, Math.max(0, input.rfcElectrolyzerPowerLimitKW))
+          : surplusAfterBatteryKW;
+
+      rfcStepResult = stepRFC({
+        currentState: currentRFCState,
+        availableSurplusPowerKW: budgetForRFC,
+        requestedDischargeKW: 0,
+        availableWaterL: input.availableRFCWaterL ?? currentRFCState.waterInventoryL,
+        modeOverride: input.rfcModeOverride,
+        dtHours: dt,
+        config: rfcConfig,
+      });
+
+      rfcChargeKW = rfcStepResult.electricalInputKW;
+      curtailedGenKW = Math.max(0, surplusAfterBatteryKW - rfcChargeKW);
+    } else {
+      curtailedGenKW = surplusAfterBatteryKW;
+    }
 
     // Chemical energy stored and conversion loss
     batteryStoredDeltaKWh = batteryChargeKW * batteryConfig.chargeEfficiency * dt;
@@ -252,8 +304,29 @@ export function stepResourceModel(input: ResourceStepInput): StepResult {
     batteryLossKWh = chemDrawnKWh - batteryDischargeKW * dt;
     nextStoredKWh = Math.max(0, currentState.batteryStoredKWh - chemDrawnKWh);
 
-    // Total power available at the distribution bus
-    const totalBusPowerAvailableKW = totalGenKW + batteryDischargeKW;
+    const deficitAfterBatteryKW = Math.max(0, deficitKW - batteryDischargeKW);
+
+    if (isRFCActive) {
+      const rfcDischargeRequestKW =
+        input.rfcGenerationLimitKW !== undefined
+          ? Math.min(deficitAfterBatteryKW, Math.max(0, input.rfcGenerationLimitKW))
+          : deficitAfterBatteryKW;
+
+      rfcStepResult = stepRFC({
+        currentState: currentRFCState,
+        availableSurplusPowerKW: 0,
+        requestedDischargeKW: rfcDischargeRequestKW,
+        availableWaterL: input.availableRFCWaterL ?? currentRFCState.waterInventoryL,
+        modeOverride: input.rfcModeOverride,
+        dtHours: dt,
+        config: rfcConfig,
+      });
+
+      rfcGenerationKW = rfcStepResult.electricalOutputKW;
+    }
+
+    // Total power available at the distribution bus (Generation + Battery Discharge + RFC Generation)
+    const totalBusPowerAvailableKW = totalGenKW + batteryDischargeKW + rfcGenerationKW;
 
     // Allocate bus power: Essential load has absolute priority
     if (totalBusPowerAvailableKW >= essentialDemandKW) {
@@ -263,7 +336,7 @@ export function stepResourceModel(input: ResourceStepInput): StepResult {
       unmetFlexibleLoadKW = totalFlexibleRequestedKW - flexibleServedKW;
       unmetDemandKW = unmetFlexibleLoadKW;
     } else {
-      // Catastrophic: Generation + Storage cannot even satisfy life-support!
+      // Catastrophic: Generation + Storage + RFC cannot even satisfy life-support!
       essentialServedKW = totalBusPowerAvailableKW;
       unmetEssentialLoadKW = essentialDemandKW - essentialServedKW;
       flexibleServedKW = 0;
@@ -286,6 +359,9 @@ export function stepResourceModel(input: ResourceStepInput): StepResult {
   // --------------------------------------------------------------------------
   const minReserveKWh =
     batteryConfig.capacityKWh * (safetyConstraints.minBatterySocPct / 100.0);
+  const safeBatteryEnergyAvailableKWh = Math.max(0, currentState.batteryStoredKWh - minReserveKWh);
+  const safeBatteryPowerAvailableKW = (safeBatteryEnergyAvailableKWh * batteryConfig.dischargeEfficiency) / dt;
+  const availableSurplusPowerKW = Math.max(0, netPowerBeforeStorageKW);
   let backupEnergyUsedKWh = currentState.backupEnergyUsedKWh;
   let isEmergencyReserveBreached = false;
 
@@ -473,8 +549,74 @@ export function stepResourceModel(input: ResourceStepInput): StepResult {
   );
 
   // --------------------------------------------------------------------------
-  // 8. Next State Assembly
+  // 8. Next State Assembly & Emergency Dispatch Classification
   // --------------------------------------------------------------------------
+  let energyManagementState: EnergyManagementState = 'NORMAL';
+  if (netPowerBeforeStorageKW >= 0) {
+    const wasInShortage =
+      currentState.energyManagementState &&
+      ['SOLAR_SHORTAGE', 'BATTERY_SUPPORT', 'RFC_SUPPORT', 'ENERGY_CONSERVATION', 'CRITICAL_POWER_SHORTAGE'].includes(
+        currentState.energyManagementState
+      );
+    if (wasInShortage || (currentState.batterySocPct < batteryConfig.nominalMaxSocPct && solarGenKW > 0 && batteryChargeKW > 0)) {
+      energyManagementState = 'RECOVERY';
+    } else {
+      energyManagementState = 'NORMAL';
+    }
+  } else {
+    if (unmetEssentialLoadKW > 0.001) {
+      energyManagementState = 'CRITICAL_POWER_SHORTAGE';
+    } else if (rfcGenerationKW > 0.001) {
+      energyManagementState = 'RFC_SUPPORT';
+    } else if (batteryDischargeKW > 0.001 && currentState.batteryStoredKWh > minReserveKWh + 0.001) {
+      energyManagementState = 'BATTERY_SUPPORT';
+    } else if (unmetFlexibleLoadKW > 0.001) {
+      energyManagementState = 'ENERGY_CONSERVATION';
+    } else {
+      energyManagementState = 'SOLAR_SHORTAGE';
+    }
+  }
+
+  let deficitType: PowerDeficitType = 'NONE';
+  if (totalGenKW <= 0.001 && batteryDischargeKW <= 0.001 && rfcGenerationKW <= 0.001 && essentialDemandKW > 0) {
+    deficitType = 'COMPLETE_LOSS_OF_GENERATION';
+  } else if (unmetEssentialLoadKW > 0.001) {
+    deficitType = 'PARTIAL_ESSENTIAL_DEFICIT';
+  } else if (unmetFlexibleLoadKW > 0.001) {
+    deficitType = 'FLEXIBLE_CURTAILMENT';
+  } else {
+    deficitType = 'NONE';
+  }
+
+  let shortageDurationHours = 0;
+  if (
+    deficitType !== 'NONE' ||
+    ['SOLAR_SHORTAGE', 'BATTERY_SUPPORT', 'RFC_SUPPORT', 'ENERGY_CONSERVATION', 'CRITICAL_POWER_SHORTAGE'].includes(
+      energyManagementState
+    )
+  ) {
+    shortageDurationHours = (currentState.shortageDurationHours ?? 0) + dt;
+  } else {
+    shortageDurationHours = 0;
+  }
+
+  const cumulativeUnmetEssentialEnergyKWh =
+    (currentState.cumulativeUnmetEssentialEnergyKWh ?? 0) + unmetEssentialLoadKW * dt;
+
+  const rfcWaterFlow = rfcStepResult
+    ? createRFCWaterFlowRecord(
+        nextHour,
+        rfcStepResult.electrolyzerResult.waterRequestedL,
+        rfcStepResult.electrolyzerResult.waterConsumedL,
+        rfcStepResult.electrolyzerResult.waterUnavailableL,
+        rfcStepResult.nextState.cumulativeWaterConsumedL,
+        rfcStepResult.fuelCellResult.waterProducedL,
+        rfcStepResult.fuelCellResult.waterRecoveredL,
+        rfcStepResult.fuelCellResult.waterLossL,
+        rfcStepResult.nextState.cumulativeWaterRecoveredL
+      )
+    : undefined;
+
   const nextState: HabitatResourceState = {
     timestampHour: nextHour,
     sol: Number((currentState.sol + dt / LUNAR_SOL_HOURS).toFixed(4)),
@@ -492,6 +634,13 @@ export function stepResourceModel(input: ResourceStepInput): StepResult {
     cumulativeUnmetWaterL: Number(
       ((currentState.cumulativeUnmetWaterL ?? 0) + unmetWaterDemandL).toFixed(3)
     ),
+    energyManagementState,
+    deficitType,
+    shortageDurationHours,
+    cumulativeUnmetEssentialEnergyKWh: Number(cumulativeUnmetEssentialEnergyKWh.toFixed(4)),
+    safeBatteryEnergyAvailableKWh: Number(safeBatteryEnergyAvailableKWh.toFixed(4)),
+    safeBatteryPowerAvailableKW: Number(safeBatteryPowerAvailableKW.toFixed(3)),
+    rfcState: rfcStepResult ? rfcStepResult.nextState : currentRFCState,
   };
 
   const isSafe = violations.length === 0;
@@ -518,6 +667,10 @@ export function stepResourceModel(input: ResourceStepInput): StepResult {
     batteryStoredDeltaKWh: Number(batteryStoredDeltaKWh.toFixed(4)),
     batteryLossKWh: Number(batteryLossKWh.toFixed(4)),
     curtailedGenerationKW: Number(curtailedGenKW.toFixed(3)),
+    rfcGenerationKW: Number(rfcGenerationKW.toFixed(3)),
+    rfcChargeKW: Number(rfcChargeKW.toFixed(3)),
+    rfcStep: rfcStepResult,
+    rfcWaterFlow,
     waterDeltaL: Number(waterDeltaL.toFixed(3)),
     waterConsumedL: Number(actualConsumedL.toFixed(3)),
     waterRecoveredL: Number(actualRecoveredL.toFixed(3)),
@@ -530,6 +683,13 @@ export function stepResourceModel(input: ResourceStepInput): StepResult {
     violations,
     isSafe,
     isInfeasible,
+    energyManagementState,
+    deficitType,
+    shortageDurationHours,
+    cumulativeUnmetEssentialEnergyKWh: Number(cumulativeUnmetEssentialEnergyKWh.toFixed(4)),
+    safeBatteryEnergyAvailableKWh: Number(safeBatteryEnergyAvailableKWh.toFixed(4)),
+    safeBatteryPowerAvailableKW: Number(safeBatteryPowerAvailableKW.toFixed(3)),
+    availableSurplusPowerKW: Number(availableSurplusPowerKW.toFixed(3)),
   };
 }
 
@@ -550,6 +710,9 @@ export function stepWithControllerDecision(
     batteryConfig?: BatteryConfig;
     waterConfig?: WaterConfig;
     safetyConstraints?: SafetyConstraints;
+    rfcConfig?: RFCConfig;
+    enableRFC?: boolean;
+    rfcModeOverride?: 'auto' | 'electrolyzing' | 'generating' | 'idle' | 'disabled';
   }
 ): StepResult {
   return stepResourceModel({
@@ -562,5 +725,8 @@ export function stepWithControllerDecision(
     batteryConfig: configs?.batteryConfig,
     waterConfig: configs?.waterConfig,
     safetyConstraints: configs?.safetyConstraints,
+    rfcConfig: configs?.rfcConfig,
+    enableRFC: configs?.enableRFC,
+    rfcModeOverride: configs?.rfcModeOverride,
   });
 }
