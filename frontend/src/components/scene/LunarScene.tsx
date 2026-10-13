@@ -17,8 +17,7 @@ import {
   LUNAR_FILL_INTENSITY
 } from '../../utils/celestialConstants';
 
-const AstronautOrbitFlashlight: React.FC = () => {
-  const isFlashlightOn = useHabitatStore((state) => state.isFlashlightOn);
+const AstronautOrbitFlashlightMesh: React.FC = () => {
   const playerPosition = useHabitatStore((state) => state.playerPosition);
   const playerYaw = useHabitatStore((state) => state.playerYaw);
   const playerPitch = useHabitatStore((state) => state.playerPitch);
@@ -39,8 +38,6 @@ const AstronautOrbitFlashlight: React.FC = () => {
       lightRef.current.target = targetRef.current;
     }
   }, [playerPosition, playerYaw, playerPitch]);
-
-  if (!isFlashlightOn) return null;
 
   return (
     <>
@@ -66,41 +63,51 @@ const AstronautOrbitFlashlight: React.FC = () => {
   );
 };
 
+const AstronautOrbitFlashlight: React.FC = () => {
+  const isFlashlightOn = useHabitatStore((state) => state.isFlashlightOn);
+  if (!isFlashlightOn) return null;
+  return <AstronautOrbitFlashlightMesh />;
+};
+
+const PROFILER_BUFFER_SIZE = 120;
+
 const SceneProfiler: React.FC = () => {
   const { gl, scene } = useThree();
   const frameTimes = useRef<number[]>([]);
-  const lastTime = useRef<number>(performance.now());
   const callsHistory = useRef<number[]>([]);
   const trianglesHistory = useRef<number[]>([]);
-  const frameCount = useRef(0);
+  const bufferIndex = useRef(0);
+  const lastTime = useRef<number>(performance.now());
 
   useFrame(() => {
     const now = performance.now();
     const dt = now - lastTime.current;
     lastTime.current = now;
     if (dt > 0 && dt < 1000) {
-      frameTimes.current.push(dt);
-      if (frameTimes.current.length > 120) frameTimes.current.shift();
+      const idx = bufferIndex.current % PROFILER_BUFFER_SIZE;
+      frameTimes.current[idx] = dt;
+      callsHistory.current[idx] = gl.info.render.calls;
+      trianglesHistory.current[idx] = gl.info.render.triangles;
+      bufferIndex.current++;
     }
+  });
 
-    callsHistory.current.push(gl.info.render.calls);
-    if (callsHistory.current.length > 120) callsHistory.current.shift();
-
-    trianglesHistory.current.push(gl.info.render.triangles);
-    if (trianglesHistory.current.length > 120) trianglesHistory.current.shift();
-
+  useEffect(() => {
     (window as any).__HABITAT_METRICS__ = {
       getReport: () => {
-        const sorted = [...frameTimes.current].sort((a, b) => a - b);
-        const count = sorted.length;
+        const samples = frameTimes.current.filter((n) => typeof n === 'number' && n > 0);
+        const count = samples.length;
         if (count === 0) return null;
+        const sorted = [...samples].sort((a, b) => a - b);
         const avgDt = sorted.reduce((a, b) => a + b, 0) / count;
         const medianDt = sorted[Math.floor(count * 0.5)];
         const p95Dt = sorted[Math.floor(count * 0.95)];
         const minDt = sorted[0];
         const maxDt = sorted[count - 1];
-        const avgCalls = callsHistory.current.reduce((a, b) => a + b, 0) / (callsHistory.current.length || 1);
-        const avgTriangles = trianglesHistory.current.reduce((a, b) => a + b, 0) / (trianglesHistory.current.length || 1);
+        const calls = callsHistory.current.filter((n) => typeof n === 'number');
+        const triangles = trianglesHistory.current.filter((n) => typeof n === 'number');
+        const avgCalls = calls.length ? calls.reduce((a, b) => a + b, 0) / calls.length : 0;
+        const avgTriangles = triangles.length ? triangles.reduce((a, b) => a + b, 0) / triangles.length : 0;
 
         let meshCount = 0;
         let lightCount = 0;
@@ -130,7 +137,7 @@ const SceneProfiler: React.FC = () => {
         };
       }
     };
-  });
+  }, [gl, scene]);
 
   return null;
 };

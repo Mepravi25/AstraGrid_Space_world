@@ -47,6 +47,7 @@ export const EquipmentInspector: React.FC = () => {
   const toggleRFCPanel = useHabitatStore((state) => state.toggleRFCPanel);
   const isRFCPanelOpen = useHabitatStore((state) => state.isRFCPanelOpen);
   const rfcState = useHabitatStore((state) => state.rfcState);
+  const hudMode = useHabitatStore((state) => state.hudMode);
 
   const equipment = equipmentList.find((e) => e.id === selectedEquipmentId);
 
@@ -59,7 +60,6 @@ export const EquipmentInspector: React.FC = () => {
     { status: 'offline', label: 'Offline', icon: PowerOff, color: 'hover:border-slate-500 hover:text-slate-400' },
   ];
 
-  const hudMode = useHabitatStore((state) => state.hudMode);
   const isMissionControl = hudMode === 'mission_control';
 
   return (

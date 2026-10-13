@@ -123,8 +123,12 @@ export const RFCPowerUnit: React.FC<RFCPowerUnitProps> = ({
   const beaconLightRef = useRef<THREE.PointLight>(null);
   const [hovered, setHovered] = useState(false);
 
-  // Connect strictly to existing Zustand RFC simulation state
-  const rfcState = useHabitatStore((state) => state.rfcState);
+  // Connect strictly to existing Zustand RFC simulation state with narrow selectors
+  const isRFCEnabled = useHabitatStore((state) => state.rfcState.isEnabled);
+  const rfcMode = useHabitatStore((state) => state.rfcState.mode);
+  // Quantized fill bars (0-5) to avoid per-tick re-renders during continuous gas transfer
+  const h2Bars = useHabitatStore((state) => Math.min(5, Math.floor((state.rfcState.h2FillPct ?? 0) / 20)));
+  const o2Bars = useHabitatStore((state) => Math.min(5, Math.floor((state.rfcState.o2FillPct ?? 0) / 20)));
   const isRFCPanelOpen = useHabitatStore((state) => state.isRFCPanelOpen);
   const toggleRFCPanel = useHabitatStore((state) => state.toggleRFCPanel);
   const selectedEquipmentId = useHabitatStore((state) => state.selectedEquipmentId);
@@ -138,7 +142,7 @@ export const RFCPowerUnit: React.FC<RFCPowerUnitProps> = ({
 
   // Derive visual status indicator state strictly from existing RFC simulation
   const indicatorState = useMemo(() => {
-    if (!rfcState.isEnabled || rfcState.mode === 'unavailable') {
+    if (!isRFCEnabled || rfcMode === 'unavailable') {
       return {
         type: 'inactive' as const,
         color: '#ef4444',
@@ -146,7 +150,7 @@ export const RFCPowerUnit: React.FC<RFCPowerUnitProps> = ({
         equipmentStatus: 'offline' as const,
       };
     }
-    if (rfcState.mode === 'generating') {
+    if (rfcMode === 'generating') {
       return {
         type: 'generating' as const,
         color: '#10b981',
@@ -154,7 +158,7 @@ export const RFCPowerUnit: React.FC<RFCPowerUnitProps> = ({
         equipmentStatus: 'nominal' as const,
       };
     }
-    if (rfcState.mode === 'electrolyzing') {
+    if (rfcMode === 'electrolyzing') {
       return {
         type: 'electrolyzing' as const,
         color: '#00e5ff',
@@ -169,7 +173,7 @@ export const RFCPowerUnit: React.FC<RFCPowerUnitProps> = ({
       name: 'STANDBY',
       equipmentStatus: 'nominal' as const,
     };
-  }, [rfcState.isEnabled, rfcState.mode]);
+  }, [isRFCEnabled, rfcMode]);
 
   // Procedural Placards (Memoized once)
   const h2Texture = useMemo(
@@ -387,8 +391,7 @@ export const RFCPowerUnit: React.FC<RFCPowerUnitProps> = ({
 
         {/* Vertical H₂ Fill Level Gauge (Visualizing actual simulation inventory) */}
         {[-0.32, -0.16, 0, 0.16, 0.32].map((segY, idx) => {
-          const threshold = (idx + 1) * 20;
-          const isLit = rfcState.h2FillPct >= threshold;
+          const isLit = idx < h2Bars;
           return (
             <mesh key={idx} geometry={meterSegmentGeo} position={[0.57, segY, 0]}>
               <meshBasicMaterial color={isLit ? '#00e5ff' : '#1e293b'} />
@@ -446,8 +449,7 @@ export const RFCPowerUnit: React.FC<RFCPowerUnitProps> = ({
 
         {/* Vertical O₂ Fill Level Gauge (Visualizing actual simulation inventory) */}
         {[-0.32, -0.16, 0, 0.16, 0.32].map((segY, idx) => {
-          const threshold = (idx + 1) * 20;
-          const isLit = rfcState.o2FillPct >= threshold;
+          const isLit = idx < o2Bars;
           return (
             <mesh key={idx} geometry={meterSegmentGeo} position={[-0.64, segY, 0]}>
               <meshBasicMaterial color={isLit ? '#38bdf8' : '#1e293b'} />

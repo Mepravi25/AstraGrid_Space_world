@@ -65,29 +65,30 @@ export const EQUIPMENT_LABEL_CONFIGS: EquipmentLabelDef[] = [
   },
 ];
 
+// Precompute static 3D anchor positions above terrain surface once
+const ANCHOR_POSITIONS: Record<string, [number, number, number]> = Object.fromEntries(
+  EQUIPMENT_LABEL_CONFIGS.map((def) => {
+    const groundY = getLunarHeight(def.defaultPos[0], def.defaultPos[2]);
+    return [def.id, [def.defaultPos[0], groundY + def.yOffset, def.defaultPos[2]]];
+  })
+);
+
 interface SingleLabelProps {
   def: EquipmentLabelDef;
 }
 
-const SingleEquipmentLabel: React.FC<SingleLabelProps> = ({ def }) => {
+const SingleEquipmentLabel: React.FC<SingleLabelProps> = React.memo(({ def }) => {
   const selectEquipment = useHabitatStore((state) => state.selectEquipment);
-  const selectedEquipmentId = useHabitatStore((state) => state.selectedEquipmentId);
   const toggleRFCPanel = useHabitatStore((state) => state.toggleRFCPanel);
-  const isRFCPanelOpen = useHabitatStore((state) => state.isRFCPanelOpen);
 
-  // Equipment data for real items
-  const equipment = useHabitatStore((state) =>
-    state.equipment.find((e) => e.id === def.id)
+  // Narrow primitive boolean selector: only re-renders when this specific label selection state toggles
+  const isSelected = useHabitatStore(
+    (state) =>
+      state.selectedEquipmentId === def.id ||
+      (state.isRFCPanelOpen && (def.id === 'rfc-power-unit' || def.id === 'rfc-virtual-unit'))
   );
 
-  const isSelected =
-    selectedEquipmentId === def.id ||
-    (isRFCPanelOpen && (def.id === 'rfc-power-unit' || def.id === 'rfc-virtual-unit'));
-
-  // Compute 3D position anchored above terrain
-  const rawPos = equipment?.position || def.defaultPos;
-  const groundY = getLunarHeight(rawPos[0], rawPos[2]);
-  const anchorY = groundY + def.yOffset;
+  const anchorPos = ANCHOR_POSITIONS[def.id] || [def.defaultPos[0], def.defaultPos[1] + def.yOffset, def.defaultPos[2]];
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -99,11 +100,12 @@ const SingleEquipmentLabel: React.FC<SingleLabelProps> = ({ def }) => {
   };
 
   return (
-    <group position={[rawPos[0], anchorY, rawPos[2]]}>
+    <group position={anchorPos}>
       <Html
         center
         pointerEvents="auto"
         zIndexRange={[40, 0]}
+        distanceFactor={40}
         style={{ pointerEvents: 'auto' }}
       >
         <button
@@ -128,7 +130,7 @@ const SingleEquipmentLabel: React.FC<SingleLabelProps> = ({ def }) => {
       </Html>
     </group>
   );
-};
+});
 
 /**
  * Floating Resource Labels Manager in 3D Lunar Scene.

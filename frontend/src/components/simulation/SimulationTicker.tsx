@@ -7,13 +7,15 @@ export const SimulationTicker: React.FC = () => {
   const lastTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
+    if (!isSimulating) return;
+
     lastTimeRef.current = Date.now();
     const interval = setInterval(() => {
       const now = Date.now();
       const deltaSec = (now - lastTimeRef.current) / 1000;
       lastTimeRef.current = now;
 
-      if (isSimulating && deltaSec > 0 && deltaSec < 5) {
+      if (deltaSec > 0 && deltaSec < 5) {
         tickSimulation(deltaSec);
       }
     }, 250);

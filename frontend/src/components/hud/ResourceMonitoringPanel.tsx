@@ -18,13 +18,10 @@ import {
 } from 'lucide-react';
 import { useHabitatStore } from '../../store/useHabitatStore';
 
-export const ResourceMonitoringPanel: React.FC = () => {
+const ResourceMonitoringContent: React.FC = () => {
   const telemetry = useHabitatStore((state) => state.telemetry);
   const rfcState = useHabitatStore((state) => state.rfcState);
-  const isResourceMonitoringOpen = useHabitatStore((state) => state.isResourceMonitoringOpen);
   const toggleResourceMonitoring = useHabitatStore((state) => state.toggleResourceMonitoring);
-
-  if (!isResourceMonitoringOpen) return null;
 
   // 1. SOLAR POWER CALCULATIONS
   const solarGenKW = telemetry.solarGenerationKW;
@@ -494,4 +491,10 @@ export const ResourceMonitoringPanel: React.FC = () => {
       </div>
     </div>
   );
+};
+
+export const ResourceMonitoringPanel: React.FC = () => {
+  const isResourceMonitoringOpen = useHabitatStore((state) => state.isResourceMonitoringOpen);
+  if (!isResourceMonitoringOpen) return null;
+  return <ResourceMonitoringContent />;
 };

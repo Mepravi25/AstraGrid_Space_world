@@ -20,11 +20,10 @@ import {
 } from 'lucide-react';
 import { useHabitatStore } from '../../store/useHabitatStore';
 
-export const RFCPanel: React.FC = () => {
+const RFCPanelContent: React.FC = () => {
   const rfcState = useHabitatStore((state) => state.rfcState);
   const rfcConfig = useHabitatStore((state) => state.rfcConfig);
   const rfcModeOverride = useHabitatStore((state) => state.rfcModeOverride);
-  const isRFCPanelOpen = useHabitatStore((state) => state.isRFCPanelOpen);
   const activeRFCTab = useHabitatStore((state) => state.activeRFCTab);
   const telemetry = useHabitatStore((state) => state.telemetry);
   const eventLog = useHabitatStore((state) => state.eventLog);
@@ -34,8 +33,6 @@ export const RFCPanel: React.FC = () => {
   const setRFCEnabled = useHabitatStore((state) => state.setRFCEnabled);
   const setRFCModeOverride = useHabitatStore((state) => state.setRFCModeOverride);
   const clearEventLog = useHabitatStore((state) => state.clearEventLog);
-
-  if (!isRFCPanelOpen) return null;
 
   // Derive surplus solar relative to essential & nominal load
   const surplusSolarKW = Math.max(0, telemetry.solarGenerationKW - (telemetry.essentialDemandKW ?? 40.1));
@@ -607,4 +604,10 @@ export const RFCPanel: React.FC = () => {
       </div>
     </div>
   );
+};
+
+export const RFCPanel: React.FC = () => {
+  const isRFCPanelOpen = useHabitatStore((state) => state.isRFCPanelOpen);
+  if (!isRFCPanelOpen) return null;
+  return <RFCPanelContent />;
 };
