@@ -137,7 +137,7 @@ const computeAggregateTelemetry = (
       solarGen += Math.max(0, item.powerKW);
     } else if (item.type === 'nuclear_power') {
       nuclearGen += Math.max(0, item.powerKW);
-    } else if (item.powerKW < 0) {
+    } else if (item.type !== 'battery_bank' && item.powerKW < 0) {
       demand += Math.abs(item.powerKW);
     }
   }
@@ -805,14 +805,52 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
       const baseEquipment: EquipmentItem[] = JSON.parse(JSON.stringify(INITIAL_EQUIPMENT_DATA));
       const updated = baseEquipment.map((item) => {
         const override = scenario.equipmentOverrides[item.id];
+        let itemStatus = item.status;
+        let itemPower = item.powerKW;
         if (override) {
+          itemStatus = override.status ?? item.status;
+          itemPower = override.powerKW !== undefined ? override.powerKW : item.powerKW;
+        }
+        if (item.type === 'battery_bank') {
+          const soc = scenario.initialBatterySoc;
+          const stored = Number(((soc / 100) * 500).toFixed(1));
           return {
             ...item,
-            status: override.status ?? item.status,
-            powerKW: override.powerKW !== undefined ? override.powerKW : item.powerKW
+            status: itemStatus,
+            powerKW: itemPower,
+            metrics: {
+              ...item.metrics,
+              stateOfCharge: item.metrics.stateOfCharge
+                ? { ...item.metrics.stateOfCharge, value: soc }
+                : item.metrics.stateOfCharge,
+              storedCapacity: item.metrics.storedCapacity
+                ? { ...item.metrics.storedCapacity, value: stored }
+                : item.metrics.storedCapacity,
+            },
           };
         }
-        return item;
+        if (item.type === 'potable_water') {
+          const waterL = (scenario.initialWaterReservePct / 100) * 3000;
+          return {
+            ...item,
+            status: itemStatus,
+            powerKW: itemPower,
+            metrics: {
+              ...item.metrics,
+              waterVolume: item.metrics.waterVolume
+                ? { ...item.metrics.waterVolume, value: Math.round(waterL) }
+                : item.metrics.waterVolume,
+              capacityPct: item.metrics.capacityPct
+                ? { ...item.metrics.capacityPct, value: scenario.initialWaterReservePct }
+                : item.metrics.capacityPct,
+            },
+          };
+        }
+        return {
+          ...item,
+          status: itemStatus,
+          powerKW: itemPower,
+        };
       });
 
       const newTelem = computeAggregateTelemetry(
@@ -856,7 +894,9 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
         if (item.status !== 'offline') {
           if (item.type === 'solar_array') solarGenKW += Math.max(0, item.powerKW);
           else if (item.type === 'nuclear_power') nuclearGenKW += Math.max(0, item.powerKW);
-          else if (item.powerKW < 0) equipmentDemandKW += Math.abs(item.powerKW);
+          else if (item.type !== 'battery_bank' && item.powerKW < 0) {
+            equipmentDemandKW += Math.abs(item.powerKW);
+          }
         }
       }
       const baseNetPowerKW = solarGenKW + nuclearGenKW - equipmentDemandKW;
@@ -866,6 +906,7 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
       let newRFCState = rfcState;
       let rfcGenKW = 0;
       let rfcElyKW = 0;
+      let batteryFlowKW = 0;
 
       if (baseNetPowerKW >= 0) {
         // Generation Surplus: charge battery up to headroom/rate, route excess to RFC electrolyzer
@@ -877,6 +918,7 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
 
         const batteryEnergyDeltaKWh = batteryChargeKW * 0.95 * deltaHours;
         newStoredKWh = Math.min(500, telemetry.batteryStoredKWh + batteryEnergyDeltaKWh);
+        batteryFlowKW = batteryChargeKW;
 
         if (rfcState.isEnabled && rfcConfig.enabled && rfcModeOverride !== 'disabled') {
           const rfcStepRes = stepRFC({
@@ -901,6 +943,7 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
 
         const chemDrawnKWh = (batteryDischargeKW * deltaHours) / 0.95;
         newStoredKWh = Math.max(minReserveKWh, telemetry.batteryStoredKWh - chemDrawnKWh);
+        batteryFlowKW = -batteryDischargeKW;
 
         if (rfcState.isEnabled && rfcConfig.enabled && rfcModeOverride !== 'disabled') {
           const rfcStepRes = stepRFC({
@@ -929,8 +972,42 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
         : 0;
       const nextCumulativeUnmet = (telemetry.cumulativeUnmetEssentialKWh ?? 0) + (currentUnmetEssentialKW * deltaHours);
 
+      // Keep equipment items synchronized with authoritative battery and water state
+      const updatedEquipment = equipment.map((item) => {
+        if (item.type === 'battery_bank') {
+          return {
+            ...item,
+            powerKW: Number(batteryFlowKW.toFixed(1)),
+            metrics: {
+              ...item.metrics,
+              stateOfCharge: item.metrics.stateOfCharge
+                ? { ...item.metrics.stateOfCharge, value: Number(newBatterySoc.toFixed(1)) }
+                : item.metrics.stateOfCharge,
+              storedCapacity: item.metrics.storedCapacity
+                ? { ...item.metrics.storedCapacity, value: Number(newStoredKWh.toFixed(1)) }
+                : item.metrics.storedCapacity,
+            },
+          };
+        }
+        if (item.type === 'potable_water') {
+          return {
+            ...item,
+            metrics: {
+              ...item.metrics,
+              waterVolume: item.metrics.waterVolume
+                ? { ...item.metrics.waterVolume, value: Math.round(newWater) }
+                : item.metrics.waterVolume,
+              capacityPct: item.metrics.capacityPct
+                ? { ...item.metrics.capacityPct, value: Number(((newWater / 3000) * 100).toFixed(1)) }
+                : item.metrics.capacityPct,
+            },
+          };
+        }
+        return item;
+      });
+
       const newTelem = computeAggregateTelemetry(
-        equipment,
+        updatedEquipment,
         newSol,
         newTotalSeconds,
         newBatterySoc,
@@ -1029,7 +1106,12 @@ export const useHabitatStore = create<HabitatStoreState>((set, get) => {
 
       const updatedLog = newEvents.length > 0 ? [...newEvents, ...eventLog].slice(0, 50) : eventLog;
 
-      set({ telemetry: newTelem, rfcState: newRFCState, eventLog: updatedLog });
+      set({
+        equipment: updatedEquipment,
+        telemetry: newTelem,
+        rfcState: newRFCState,
+        eventLog: updatedLog
+      });
     }
   };
 });

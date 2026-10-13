@@ -14,13 +14,18 @@ import {
   X,
   Gauge,
   Layers,
-  Power
+  Power,
+  Clock,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
 import { useHabitatStore } from '../../store/useHabitatStore';
+import { estimateEnergyForecast } from '../../simulation/energyForecast';
 
 const ResourceMonitoringContent: React.FC = () => {
   const telemetry = useHabitatStore((state) => state.telemetry);
   const rfcState = useHabitatStore((state) => state.rfcState);
+  const currentScenarioId = useHabitatStore((state) => state.currentScenarioId);
   const toggleResourceMonitoring = useHabitatStore((state) => state.toggleResourceMonitoring);
 
   // 1. SOLAR POWER CALCULATIONS
@@ -193,6 +198,61 @@ const ResourceMonitoringContent: React.FC = () => {
         return (
           <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 font-mono text-[10px]">
             {energyMgmtState}
+          </span>
+        );
+    }
+  };
+
+  // 6. ENERGY FORECAST ASSESSMENT (MODULE B)
+  const forecastAssessment = React.useMemo(() => {
+    return estimateEnergyForecast({
+      scenarioId: currentScenarioId,
+      batteryStoredKWh: telemetry.batteryStoredKWh,
+      batteryCapacityKWh: telemetry.batteryCapacityKWh,
+      batteryMinReservePct: telemetry.batteryMinReservePct,
+      currentSolarKW: telemetry.solarGenerationKW,
+      nuclearGenerationKW: telemetry.nuclearGenerationKW,
+      totalDemandKW: telemetry.totalDemandKW,
+      essentialDemandKW: telemetry.essentialDemandKW,
+      rfcUsableElectricalEnergyKWh: rfcState.usableElectricalEnergyKWh,
+    });
+  }, [
+    currentScenarioId,
+    Math.round(telemetry.batteryStoredKWh),
+    Math.round(telemetry.solarGenerationKW),
+    Math.round(telemetry.totalDemandKW),
+    Math.round(telemetry.nuclearGenerationKW),
+    Math.round(rfcState.usableElectricalEnergyKWh),
+  ]);
+
+  const getForecastStatusBadge = (status: 'NORMAL' | 'WATCH' | 'WARNING' | 'CRITICAL') => {
+    switch (status) {
+      case 'NORMAL':
+        return (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 font-mono text-[10px] font-bold">
+            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+            NORMAL
+          </span>
+        );
+      case 'WATCH':
+        return (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-950/80 border border-sky-500/60 text-sky-300 font-mono text-[10px] font-bold">
+            <Activity className="w-3 h-3 text-sky-400" />
+            WATCH
+          </span>
+        );
+      case 'WARNING':
+        return (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/60 text-amber-300 font-mono text-[10px] font-bold">
+            <AlertTriangle className="w-3 h-3 text-amber-400" />
+            WARNING
+          </span>
+        );
+      case 'CRITICAL':
+        return (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-950/90 border border-red-500 text-red-200 font-mono text-[10px] font-bold animate-pulse">
+            <ShieldAlert className="w-3 h-3 text-red-400" />
+            CRITICAL
           </span>
         );
     }
@@ -486,6 +546,96 @@ const ResourceMonitoringContent: React.FC = () => {
           <div className="p-1.5 rounded bg-slate-950/40 border border-slate-850 flex items-center justify-between font-mono text-[10px]">
             <span className="text-slate-400">Energy-Management State:</span>
             <span className="text-cyan-300 font-bold">{energyMgmtState}</span>
+          </div>
+        </section>
+
+        {/* 6. ENERGY FORECAST CARD (MODULE B) */}
+        <section className="p-2.5 rounded-lg bg-slate-900/80 border border-cyan-500/30 space-y-2">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+            <div className="flex items-center gap-1.5 text-cyan-400">
+              <Clock className="w-3.5 h-3.5" />
+              <span className="font-hud font-bold text-[11px] tracking-wide text-slate-200">
+                6. ENERGY FORECAST
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="px-1 py-0.2 rounded bg-slate-950 border border-slate-800 font-mono text-[9px] text-slate-400">
+                {forecastAssessment.horizonHours}H HORIZON
+              </span>
+              {getForecastStatusBadge(forecastAssessment.status)}
+            </div>
+          </div>
+
+          {/* Metric Grid */}
+          <div className="grid grid-cols-2 gap-2 font-mono text-[10px]">
+            <div className="p-1.5 rounded bg-slate-950/60 border border-slate-850">
+              <span className="text-[9px] text-slate-400 block">EXPECTED SOLAR</span>
+              <span className="text-amber-300 font-bold text-xs flex items-center gap-1">
+                {forecastAssessment.expectedSolarAvgKW.toFixed(1)} <span className="text-[9px] text-slate-400">kW avg</span>
+                {forecastAssessment.solarTrend === 'rising' ? (
+                  <TrendingUp className="w-3 h-3 text-emerald-400" />
+                ) : forecastAssessment.solarTrend === 'falling' || forecastAssessment.solarTrend === 'eclipsed' ? (
+                  <TrendingDown className="w-3 h-3 text-amber-400" />
+                ) : null}
+              </span>
+              <span className="text-[8px] text-slate-500 block uppercase">
+                Trend: {forecastAssessment.solarTrend} (Peak {forecastAssessment.expectedSolarPeakKW} kW)
+              </span>
+            </div>
+
+            <div className="p-1.5 rounded bg-slate-950/60 border border-slate-850">
+              <span className="text-[9px] text-slate-400 block">PREDICTED NET BALANCE</span>
+              <span
+                className={`font-bold text-xs ${
+                  forecastAssessment.predictedNetPowerKW >= 0 ? 'text-cyan-300' : 'text-amber-300'
+                }`}
+              >
+                {forecastAssessment.predictedNetPowerKW >= 0 ? '+' : ''}
+                {forecastAssessment.predictedNetPowerKW.toFixed(1)}{' '}
+                <span className="text-[9px] text-slate-400">kW</span>
+              </span>
+              <span className="text-[8px] text-slate-500 block">
+                {forecastAssessment.netPowerBalanceDescription}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-1.5 rounded bg-slate-950/40 border border-slate-850 flex items-center justify-between font-mono text-[10px]">
+            <span className="text-slate-400">Time to Battery 20% Reserve:</span>
+            <span
+              className={`font-bold ${
+                forecastAssessment.hoursToBatteryReserve !== null && forecastAssessment.hoursToBatteryReserve <= 4.0
+                  ? 'text-red-400 animate-pulse'
+                  : forecastAssessment.hoursToBatteryReserve !== null
+                  ? 'text-amber-300'
+                  : 'text-emerald-400'
+              }`}
+            >
+              {forecastAssessment.timeToReserveFormatted}
+            </span>
+          </div>
+
+          {/* RFC Passive Buffer Support */}
+          <div className="p-1.5 rounded bg-slate-950/40 border border-slate-850 flex items-center justify-between font-mono text-[9px]">
+            <span className="text-slate-400">RFC Reactant Buffer:</span>
+            <span className="text-cyan-300 font-bold">
+              {forecastAssessment.rfcUsableElectricalEnergyKWh.toFixed(1)} kWh (~{forecastAssessment.rfcSupportHoursAvailable.toFixed(1)}h support)
+            </span>
+          </div>
+
+          {/* Explanation Banner */}
+          <div
+            className={`p-1.5 rounded border text-[10px] font-mono leading-tight ${
+              forecastAssessment.status === 'CRITICAL'
+                ? 'bg-red-950/40 border-red-500/50 text-red-200'
+                : forecastAssessment.status === 'WARNING'
+                ? 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                : forecastAssessment.status === 'WATCH'
+                ? 'bg-sky-950/30 border-sky-500/30 text-sky-200'
+                : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200'
+            }`}
+          >
+            {forecastAssessment.riskExplanation}
           </div>
         </section>
       </div>
